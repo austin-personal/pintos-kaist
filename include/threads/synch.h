@@ -42,7 +42,8 @@ void cond_broadcast (struct condition *, struct lock *);
  *
  * The compiler will not reorder operations across an
  * optimization barrier.  See "Optimization Barriers" in the
- * reference guide for more information.*/
+ * reference guide for more information.
+ * 매크로는 최적화 장벽을 설정하는 역할을 합니다. 이 매크로를 통해 컴파일러가 코드의 순서를 재정렬하지 않도록 방지*/
 #define barrier() asm volatile ("" : : : "memory")
 
 #endif /* threads/synch.h */

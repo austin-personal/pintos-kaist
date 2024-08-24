@@ -176,9 +176,7 @@ thread_print_stats (void) {
    The code provided sets the new thread's `priority' member to
    PRIORITY, but no actual priority scheduling is implemented.
    Priority scheduling is the goal of Problem 1-3. */
-tid_t
-thread_create (const char *name, int priority,
-		thread_func *function, void *aux) {
+tid_t thread_create (const char *name, int priority, thread_func *function, void *aux) {
 	struct thread *t;
 	tid_t tid;
 
@@ -302,8 +300,12 @@ thread_yield (void) {
 	ASSERT (!intr_context ());
 
 	old_level = intr_disable ();
-	if (curr != idle_thread)
+	
+	//ready_list는 현제 쓰레드들이 일자로 쭉 나열되어 있음
+	// list_push_back으로 현재 쓰레드를 맨 뒤로 보냄
+	if (curr != idle_thread) 
 		list_push_back (&ready_list, &curr->elem);
+	// 
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -529,17 +531,21 @@ static void
 do_schedule(int status) {
 	ASSERT (intr_get_level () == INTR_OFF);
 	ASSERT (thread_current()->status == THREAD_RUNNING);
+
+	// 파괴해야할 쓰레드 리스트가 빌때까지, 쓰레드(디스트럯ㄴ 리스트에 담긴 쓰레드들)를 죽여라
 	while (!list_empty (&destruction_req)) {
-		struct thread *victim =
-			list_entry (list_pop_front (&destruction_req), struct thread, elem);
+		// victim은 삭제 할 쓰레드
+		// 리스트엔트리를 통해 삭제할 리스트를 특정함
+		struct thread *victim = list_entry (list_pop_front (&destruction_req), struct thread, elem);
+		// 페이지 얼록 프리 페이지를 통해 그 victim을 메모리 반환함.
 		palloc_free_page(victim);
 	}
+	// 
 	thread_current ()->status = status;
 	schedule ();
 }
 
-static void
-schedule (void) {
+static void schedule (void) {
 	struct thread *curr = running_thread ();
 	struct thread *next = next_thread_to_run ();
 

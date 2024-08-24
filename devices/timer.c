@@ -8,32 +8,31 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 
-/* See [8254] for hardware details of the 8254 timer chip. */
 
-#if TIMER_FREQ < 19
+// TIMER_FREQ 유효성 검사 주파수는 최저 19 최고 1000미만이어야 한다. /* See [8254] for hardware details of the 8254 timer chip. */
+#if TIMER_FREQ < 19 // TIMER_FREQ = time/frequency to generate interrupts
 #error 8254 timer requires TIMER_FREQ >= 19
 #endif
 #if TIMER_FREQ > 1000
 #error TIMER_FREQ <= 1000 recommended
 #endif
 
-/* Number of timer ticks since OS booted. */
-static int64_t ticks;
+// 시스템이 부팅된 이후 경과한 타이머 틱(tick)의 수를 저장
+static int64_t ticks; 
 
-/* Number of loops per timer tick.
-   Initialized by timer_calibrate(). */
+// Number of loops per timer tick. Initialized by timer_calibrate().
 static unsigned loops_per_tick;
 
-static intr_handler_func timer_interrupt;
-static bool too_many_loops (unsigned loops);
-static void busy_wait (int64_t loops);
-static void real_time_sleep (int64_t num, int32_t denom);
+// 함수 선언
+static intr_handler_func timer_interrupt; // 인터럽트때마다 틱을 하나씩 올려주는 함수 based on 8254 Timer
+static bool too_many_loops (unsigned loops); // 루프의 횟수가 너무 많은지를 판단하는 함수
+static void busy_wait (int64_t loops); // 지정된 횟수만큼 바쁘게 루프를 도는 함수 for 정확한 딜레이 of stopped thread
+static void real_time_sleep (int64_t num, int32_t denom); // 주어진 시간 동안 대기(슬립)하는 함수
 
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
    corresponding interrupt. */
-void
-timer_init (void) {
+void timer_init (void) {
 	/* 8254 input frequency divided by TIMER_FREQ, rounded to
 	   nearest. */
 	uint16_t count = (1193180 + TIMER_FREQ / 2) / TIMER_FREQ;
@@ -42,12 +41,11 @@ timer_init (void) {
 	outb (0x40, count & 0xff);
 	outb (0x40, count >> 8);
 
-	intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+	intr_register_ext (0x20, timer_interrupt, "");
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
-void
-timer_calibrate (void) {
+void timer_calibrate (void) {
 	unsigned high_bit, test_bit;
 
 	ASSERT (intr_get_level () == INTR_ON);
@@ -88,11 +86,14 @@ timer_elapsed (int64_t then) {
 }
 
 /* Suspends execution for approximately TICKS timer ticks. */
-void
-timer_sleep (int64_t ticks) {
+// 현재 쓰레드를 특정 기간동안 재우기:인자 값 ticks는 목표 수면시간
+void timer_sleep (int64_t ticks) {
+	// 현재 틱 을 start로
 	int64_t start = timer_ticks ();
 
 	ASSERT (intr_get_level () == INTR_ON);
+
+	// 스타트로 받은 시간보다 얼마나 흘렀는지를 확인하여 목표 수면 시간 보다 작으면, 양보(yield)
 	while (timer_elapsed (start) < ticks)
 		thread_yield ();
 }
@@ -122,28 +123,32 @@ timer_print_stats (void) {
 }
 
 /* Timer interrupt handler. */
-static void
-timer_interrupt (struct intr_frame *args UNUSED) {
+static void timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
 }
 
-/* Returns true if LOOPS iterations waits for more than one timer
-   tick, otherwise false. */
-static bool
-too_many_loops (unsigned loops) {
+// 루프의 반복 횟수(loops)가 타이머 틱(tick) 하나를 초과하여 기다리게 하는지 여부를 확인
+// busy_wait의 동작/기간을 평가: 
+static bool too_many_loops (unsigned loops) {
+
 	/* Wait for a timer tick. */
 	int64_t start = ticks;
-	while (ticks == start)
-		barrier ();
 
-	/* Run LOOPS loops. */
-	start = ticks;
-	busy_wait (loops);
+	// While: 현재 틱동안은 가만히 있어라
+	while (ticks == start) 
+		barrier (); // 컴파일러가 재정렬 방지 
+
+	
+	start = ticks; //다음 틱일때 다시 할당
+	
+	busy_wait (loops); // 자고 있는 쓰레드가 룹만큼, 계속 깨워야 되는지 확인하는 함수 (CPU 소모 with no working)
 
 	/* If the tick count changed, we iterated too long. */
 	barrier ();
+	// 만약 틱 값이 바뀌었다면, 루프가 타이머 틱 하나 이상 지속되었음을 의미하므로 true를 반환, meaning that it was too long
 	return start != ticks;
+	// Else, return false which means it has not been too long
 }
 
 /* Iterates through a simple loop LOOPS times, for implementing
@@ -153,9 +158,10 @@ too_many_loops (unsigned loops) {
    affect timings, so that if this function was inlined
    differently in different places the results would be difficult
    to predict. */
-static void NO_INLINE
-busy_wait (int64_t loops) {
-	while (loops-- > 0)
+// 바쁜대기란: 프로그램이 특정 조건이 만족될 때까지 아무 일도 하지 않고 계속해서 반복문을 돌며 CPU를 점유하는 것
+// 자고 있는 쓰레드가 일어나야 하는지 매 loop마다 확인 함
+static void NO_INLINE busy_wait (int64_t loops) {
+	while (loops-- > 0) // loops를 하나씩 줄임 0이 될때까지
 		barrier ();
 }
 
