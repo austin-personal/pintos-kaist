@@ -101,7 +101,7 @@ struct list {
    of the list element.  See the big comment at the top of the
    file for an example. */
 #define list_entry(LIST_ELEM, STRUCT, MEMBER)           \
-	((STRUCT *) ((uint8_t *) &(LIST_ELEM)->next     \
+((STRUCT *) ((uint8_t *) &(LIST_ELEM)->next     \
 		- offsetof (STRUCT, MEMBER.next)))
 
 void list_init (struct list *);
@@ -151,8 +151,7 @@ typedef bool list_less_func (const struct list_elem *a,
 /* Operations on lists with ordered elements. */
 void list_sort (struct list *,
                 list_less_func *, void *aux);
-void list_insert_ordered (struct list *, struct list_elem *,
-                          list_less_func *, void *aux);
+void list_insert_ordered (struct list *, struct list_elem *, list_less_func *, void *aux);
 void list_unique (struct list *, struct list *duplicates,
                   list_less_func *, void *aux);
 

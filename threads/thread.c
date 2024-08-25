@@ -26,7 +26,9 @@
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
-static struct list ready_list;
+static struct list ready_list; //준비 상태의 쓰레드의 리스트
+
+static struct list sleep_list; //(p1): sleeping thread list
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -56,12 +58,19 @@ bool thread_mlfqs;
 
 static void kernel_thread (thread_func *, void *aux);
 
-static void idle (void *aux UNUSED);
+static void idle (void *aux UNUSED); // 시스템에 실행할 다른 스레드가 없을 때 실행. CPU가 항상 뭔가를 실행하고 있도록 보장
 static struct thread *next_thread_to_run (void);
 static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
+
+
+// (P1): thread 재우고 깨우고
+static bool compare_thread(const struct list_elem *a, const struct list_elem *b, void *aux);
+void thread_sleep(int64_t ticks);
+void thread_awake(void);
+
 
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -71,7 +80,8 @@ static tid_t allocate_tid (void);
  * down to the start of a page.  Since `struct thread' is
  * always at the beginning of a page and the stack pointer is
  * somewhere in the middle, this locates the curent thread. */
-#define running_thread() ((struct thread *) (pg_round_down (rrsp ())))
+// 현재 실행중인 쓰레드 찾기
+#define running_thread() ((struct thread *) (pg_round_down (rrsp ()))) //CPU의 현재 스택 포인터(RSP 레지스터)의 값을 읽는다.
 
 
 // Global descriptor table for the thread_start.
@@ -106,13 +116,15 @@ thread_init (void) {
 	lgdt (&gdt_ds);
 
 	/* Init the globla thread context */
-	lock_init (&tid_lock);
-	list_init (&ready_list);
-	list_init (&destruction_req);
+	lock_init (&tid_lock); //스레드 ID 할당을 위한 락을 초기화
+	list_init (&ready_list);//실행 준비된 스레드들의 리스트를 초기화
+	list_init (&destruction_req);//제거될 스레드들의 리스트를 초기화
+
+	list_init (&sleep_list); //(P1): sleeping thread들 저장할 리스트
 
 	/* Set up a thread structure for the running thread. */
-	initial_thread = running_thread ();
-	init_thread (initial_thread, "main", PRI_DEFAULT);
+	initial_thread = running_thread (); //시스템 부팅 직후부터 존재했던 초기 실행 흐름: 부트로더가 실행되어 커널을 메모리에 로드 -> 하나의 실행 흐름(즉, 스레드)이 존재
+	init_thread (initial_thread, "main", PRI_DEFAULT); //(struct thread *t, const char *name, int priority)
 	initial_thread->status = THREAD_RUNNING;
 	initial_thread->tid = allocate_tid ();
 }
@@ -124,7 +136,7 @@ thread_start (void) {
 	/* Create the idle thread. */
 	struct semaphore idle_started;
 	sema_init (&idle_started, 0);
-	thread_create ("idle", PRI_MIN, idle, &idle_started);
+	thread_create ("idle", PRI_MIN, idle, &idle_started); // idle 쓰레드 생성
 
 	/* Start preemptive thread scheduling. */
 	intr_enable ();
@@ -207,6 +219,8 @@ tid_t thread_create (const char *name, int priority, thread_func *function, void
 
 	return tid;
 }
+// Busy-waiting을 해결하기 위한 함수
+
 
 /* Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
@@ -214,6 +228,7 @@ tid_t thread_create (const char *name, int priority, thread_func *function, void
    This function must be called with interrupts turned off.  It
    is usually a better idea to use one of the synchronization
    primitives in synch.h. */
+//쓰레드를 재우기
 void
 thread_block (void) {
 	ASSERT (!intr_context ());
@@ -230,6 +245,7 @@ thread_block (void) {
    be important: if the caller had disabled interrupts itself,
    it may expect that it can atomically unblock a thread and
    update other data. */
+// 쓰레드를 깨우기
 void
 thread_unblock (struct thread *t) {
 	enum intr_level old_level;
@@ -359,10 +375,10 @@ thread_get_recent_cpu (void) {
    ready list.  It is returned by next_thread_to_run() as a
    special case when the ready list is empty. */
 static void
-idle (void *idle_started_ UNUSED) {
-	struct semaphore *idle_started = idle_started_;
+idle (void *idle_started_ UNUSED) { //UNUSED는 컴파일러 경고를 방지하기 위한 매크로
+	struct semaphore *idle_started = idle_started_;// 세마포어에 대한 포인터
 
-	idle_thread = thread_current ();
+	idle_thread = thread_current (); // 현재 쓰레드를 idle로 저장
 	sema_up (idle_started);
 
 	for (;;) {
@@ -399,18 +415,19 @@ kernel_thread (thread_func *function, void *aux) {
 
 /* Does basic initialization of T as a blocked thread named
    NAME. */
+// 이 함수는 이미 실행 중인 초기 스레드에 대해 proper한 스레드 구조체를 설정합니다. 모든 스레드(초기 스레드 포함)가 일관된 구조를 가져야 하기 때문에
 static void
 init_thread (struct thread *t, const char *name, int priority) {
 	ASSERT (t != NULL);
 	ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
 	ASSERT (name != NULL);
 
-	memset (t, 0, sizeof *t);
-	t->status = THREAD_BLOCKED;
+	memset (t, 0, sizeof *t); // 초기 쓰레드 구조 초기화
+	t->status = THREAD_BLOCKED; // 초기 쓰레드 상태 변경
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
-	t->magic = THREAD_MAGIC;
+	t->magic = THREAD_MAGIC; // 무결성 검사 이숫자를 넣어줌으로써 통과 된 쓰레드다
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -593,4 +610,45 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
+}
+
+// (P1): 제울 쓰레드와 현재 sleep_list 의 값들 하나하나 비교 하는 함수
+static bool compare_thread(const struct list_elem *a, const struct list_elem *b, void *aux) {
+    struct thread *sa = list_entry(a, struct thread, elem);
+    struct thread *sb = list_entry(b, struct thread, elem);
+    return sa->wakeup_tick < sb->wakeup_tick;
+}
+
+// (P1) thread를 sleep(동작하지 않도록) 하고 sleep_list에 넣기
+void thread_sleep(int64_t ticks) {
+    struct thread *cur = thread_current();
+    enum intr_level old_level;
+
+    ASSERT(!intr_context());
+
+    old_level = intr_disable();
+
+	cur->wakeup_tick = timer_ticks() + ticks;// 일어날 시간 넣어주기
+	
+	list_insert_ordered(&sleep_list, &cur->elem, compare_thread, NULL);// 리스트에 넣어주기
+	thread_block(); // 현재 쓰래드 재우기
+
+    intr_set_level(old_level);
+}
+
+// (P1): 잠자는 함수 깨우기
+void thread_awake(void) {
+    int64_t current_ticks = timer_ticks();
+    struct list_elem *e = list_begin(&sleep_list);
+
+    while (e != list_end(&sleep_list)) {
+        struct thread *t = list_entry(e, struct thread, elem);
+        if (t->wakeup_tick <= current_ticks) {
+            e = list_remove(e);
+            thread_unblock(t);
+        } else {
+            // 리스트가 정렬되어 있으므로, 더 이상 깨울 스레드가 없으면 종료
+            break;
+        }
+    }
 }

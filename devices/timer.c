@@ -25,17 +25,18 @@ static unsigned loops_per_tick;
 
 // 함수 선언
 static intr_handler_func timer_interrupt; // 인터럽트때마다 틱을 하나씩 올려주는 함수 based on 8254 Timer
-static bool too_many_loops (unsigned loops); // 루프의 횟수가 너무 많은지를 판단하는 함수
-static void busy_wait (int64_t loops); // 지정된 횟수만큼 바쁘게 루프를 도는 함수 for 정확한 딜레이 of stopped thread
+static bool too_many_loops (unsigned loops); // 루프의 횟수가 너무 많은지를 판단하는 함수. 틱당 루프의 수를 조정하기 위한
+static void busy_wait (int64_t loops); // 지정된 횟수만큼 바쁘게 루프를도는 함수 for 정확한 딜레이 of stopped thread
 static void real_time_sleep (int64_t num, int32_t denom); // 주어진 시간 동안 대기(슬립)하는 함수
 
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
    corresponding interrupt. */
+// 하드웨어 타이머를 설정하여 일정 주기마다 인터럽트를 발생시키는 것
 void timer_init (void) {
 	/* 8254 input frequency divided by TIMER_FREQ, rounded to
 	   nearest. */
-	uint16_t count = (1193180 + TIMER_FREQ / 2) / TIMER_FREQ;
+	uint16_t count = (1193180 + TIMER_FREQ / 2) / TIMER_FREQ; //타이머 칩에 입력되는 기본 클럭 주파수(
 
 	outb (0x43, 0x34);    /* CW: counter 0, LSB then MSB, mode 2, binary. */
 	outb (0x40, count & 0xff);
@@ -44,7 +45,7 @@ void timer_init (void) {
 	intr_register_ext (0x20, timer_interrupt, "");
 }
 
-/* Calibrates loops_per_tick, used to implement brief delays. */
+// 정확한 시간 지연을 구현하기 위해 loops_per_tick 값을 보정하는 역할 : Calibrating = 눈금으로 재는 / 보정하는
 void timer_calibrate (void) {
 	unsigned high_bit, test_bit;
 
@@ -53,12 +54,13 @@ void timer_calibrate (void) {
 
 	/* Approximate loops_per_tick as the largest power-of-two
 	   still less than one timer tick. */
-	loops_per_tick = 1u << 10;
-	while (!too_many_loops (loops_per_tick << 1)) {
-		loops_per_tick <<= 1;
+	
+	loops_per_tick = 1u << 10; // 2의 10승(1024)으로 타이머 틱 동안 실행할 수 있는 루프값 초기화
+	while (!too_many_loops (loops_per_tick << 1)) { // too_many_loops = 총 루프가 한틱이 이상 걸렸는지 체크/
+		loops_per_tick <<= 1; // 1틱을 넘지 않았다면 루프수를 2배로 증가
 		ASSERT (loops_per_tick != 0);
 	}
-
+	// 위에서는 위의 8개의 비트들을 수정. 비유하자면, 큰자리 수를 구했다. 이젠 작은수를 구하자: 세밀조정
 	/* Refine the next 8 bits of loops_per_tick. */
 	high_bit = loops_per_tick;
 	for (test_bit = high_bit >> 1; test_bit != high_bit >> 10; test_bit >>= 1)
@@ -69,16 +71,15 @@ void timer_calibrate (void) {
 }
 
 /* Returns the number of timer ticks since the OS booted. */
-int64_t
-timer_ticks (void) {
-	enum intr_level old_level = intr_disable ();
-	int64_t t = ticks;
-	intr_set_level (old_level);
+int64_t timer_ticks (void) {
+	enum intr_level old_level = intr_disable (); // 인터럽트를 비활성화,  이전 인터럽트 상태를 old_level 변수에 저장
+	int64_t t = ticks; // 전역 변수 ticks의 현재 값을 t라는 지역 변수에 복사
+	intr_set_level (old_level);//이전의 인터럽트 상태(old_level)를 복원
 	barrier ();
 	return t;
 }
 
-/* Returns the number of timer ticks elapsed since THEN, which
+/* Returns the number of timer ticks elapsed(얼마나 시간이 지났는지) since THEN, which
    should be a value once returned by timer_ticks(). */
 int64_t
 timer_elapsed (int64_t then) {
@@ -88,14 +89,15 @@ timer_elapsed (int64_t then) {
 /* Suspends execution for approximately TICKS timer ticks. */
 // 현재 쓰레드를 특정 기간동안 재우기:인자 값 ticks는 목표 수면시간
 void timer_sleep (int64_t ticks) {
-	// 현재 틱 을 start로
-	int64_t start = timer_ticks ();
+	int64_t start = timer_ticks ();// 현재 틱 을 start로
 
 	ASSERT (intr_get_level () == INTR_ON);
 
-	// 스타트로 받은 시간보다 얼마나 흘렀는지를 확인하여 목표 수면 시간 보다 작으면, 양보(yield)
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+	if (ticks >0)
+	{
+		thread_sleep(ticks);
+	}
+
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -121,11 +123,12 @@ void
 timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
 static void timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
+	thread_awake(ticks);
 }
 
 // 루프의 반복 횟수(loops)가 타이머 틱(tick) 하나를 초과하여 기다리게 하는지 여부를 확인
@@ -166,6 +169,7 @@ static void NO_INLINE busy_wait (int64_t loops) {
 }
 
 /* Sleep for approximately NUM/DENOM seconds. */
+// 주어진 시간 동안 스레드를 일시 정지
 static void
 real_time_sleep (int64_t num, int32_t denom) {
 	/* Convert NUM/DENOM seconds into timer ticks, rounding down.

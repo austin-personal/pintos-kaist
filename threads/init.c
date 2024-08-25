@@ -71,7 +71,7 @@ main (void) {
 	char **argv;
 
 	/* Clear BSS and get machine's RAM size. */
-	bss_init ();
+	bss_init ();//  BSS(Block Started by Symbol)는 전역 변수를 0으로 초기화
 
 	/* Break command line into arguments and parse options. */
 	argv = read_command_line ();
@@ -102,7 +102,7 @@ main (void) {
 	syscall_init ();
 #endif
 	/* Start thread scheduler and enable interrupts. */
-	thread_start ();
+	thread_start (); //스레드 스케줄러를 시작하고 인터럽트를 활성화
 	serial_init_queue ();
 	timer_calibrate ();
 

@@ -41,6 +41,8 @@
 
    - up or "V": increment the value (and wake up one waiting
    thread, if any). */
+// 세마포어를 초기화: 세마포어 구조체형성
+// 세마포어는 공유자원의 수와 그 공유 자원을 사용하려고 하는 쓰레드의 대기줄이있다. 
 void
 sema_init (struct semaphore *sema, unsigned value) {
 	ASSERT (sema != NULL);
@@ -57,6 +59,7 @@ sema_init (struct semaphore *sema, unsigned value) {
    interrupts disabled, but if it sleeps then the next scheduled
    thread will probably turn interrupts back on. This is
    sema_down function. */
+// 사용가능한 공유자원의 감소
 void
 sema_down (struct semaphore *sema) {
 	enum intr_level old_level;
@@ -65,9 +68,10 @@ sema_down (struct semaphore *sema) {
 	ASSERT (!intr_context ());
 
 	old_level = intr_disable ();
+	// 공유자원이 0이면 쓰레드를 맨뒤로
 	while (sema->value == 0) {
 		list_push_back (&sema->waiters, &thread_current ()->elem);
-		thread_block ();
+		thread_block (); //현재 쓰레드 제우기
 	}
 	sema->value--;
 	intr_set_level (old_level);
