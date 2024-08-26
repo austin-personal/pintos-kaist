@@ -62,7 +62,8 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
-
+static bool priority_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+void preempt(void);
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -137,19 +138,33 @@ thread_start (void) {
    Thus, this function runs in an external interrupt context. */
 void
 thread_tick (void) {
+	// 현재 실행 중인 스레드의 포인터를 가져옵니다.
+    // `thread_current()`는 현재 실행 중인 스레드를 반환하는 함수입니다.
 	struct thread *t = thread_current ();
-
+	
 	/* Update statistics. */
+	// 현재 스레드가 idle_thread(즉, 아무 작업도 하지 않고 있는 스레드)라면,
+    // idle_ticks를 증가시킵니다. idle_ticks는 시스템이 유휴 상태일 때의 시간을 추적합니다.
+	//"유휴 상태"는 컴퓨터 시스템이나 프로그램이 실행 중이지만 
+	//현재 아무 작업도 수행하지 않고 대기 상태에 있는 것을 의미
 	if (t == idle_thread)
 		idle_ticks++;
+// `USERPROG`이 정의된 경우에만 실행됩니다.
+    // USERPROG가 활성화된 경우, 현재 스레드가 사용자 프로그램의 스레드라면,
+    // user_ticks를 증가시킵니다. user_ticks는 사용자 프로그램이 실행된 시간을 추적합니다.
 #ifdef USERPROG
 	else if (t->pml4 != NULL)
 		user_ticks++;
 #endif
+// 현재 스레드가 idle 상태도 아니고 사용자 프로그램도 아닌 커널 스레드일 경우,
+// kernel_ticks를 증가시킵니다. kernel_ticks는 커널이 실행된 시간을 추적합니다.
 	else
 		kernel_ticks++;
 
 	/* Enforce preemption. */
+	// 현재 스레드의 실행 시간을 추적하는 thread_ticks를 1 증가시킵니다.
+    // 만약 thread_ticks가 TIME_SLICE(스레드에 할당된 시간)보다 크거나 같아지면,
+    // `intr_yield_on_return()` 함수를 호출하여 스레드 선점을 요청합니다.
 	if (++thread_ticks >= TIME_SLICE)
 		intr_yield_on_return ();
 }
@@ -231,18 +246,46 @@ thread_block (void) {
    This function does not preempt the running thread.  This can
    be important: if the caller had disabled interrupts itself,
    it may expect that it can atomically unblock a thread and
-   update other data. */
+   update other data. */                
+
 void
 thread_unblock (struct thread *t) {
 	enum intr_level old_level;
 
 	ASSERT (is_thread (t));
-
+	
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	// list_push_back (&ready_list, &t->elem);
+	list_insert_ordered(&ready_list, &t->elem, priority_less, NULL);
+	// 들어올때마다 우선순위 비교 현재 실행중인 쓰레드의 우선순위가 지금 들어오는 쓰레드보다 작다면
 	t->status = THREAD_READY;
-	intr_set_level (old_level);
+	preempt();
+	intr_set_level(old_level);
+}
+static bool
+priority_less(const struct list_elem *a, const struct list_elem *b,void *aux UNUSED){
+	// list_elem을 포함하는 thread 구조체의 포인터를 얻음
+	struct thread *thread_a = list_entry(a, struct thread, elem);
+	struct thread *thread_b = list_entry(b, struct thread, elem);
+	return thread_a->priority > thread_b->priority;
+}
+
+void preempt(void){
+	struct thread *cur = thread_current();
+	struct thread *t = list_entry(list_begin(&ready_list), struct thread, elem);
+
+	// if(list_empty(&ready_list)){
+	// 	return;
+	// }
+
+	if(cur==idle_thread){
+		return;
+	}
+
+	if (cur->priority < t->priority){
+		thread_yield();
+	}
 }
 
 /* Returns the name of the running thread. */
@@ -302,8 +345,10 @@ thread_yield (void) {
 	ASSERT (!intr_context ());
 
 	old_level = intr_disable ();
-	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+	if (curr != idle_thread){
+		// list_push_back (&ready_list, &curr->elem);
+		list_insert_ordered(&ready_list, &curr->elem, priority_less, NULL);
+	}
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -312,6 +357,7 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	preempt();
 }
 
 /* Returns the current thread's priority. */

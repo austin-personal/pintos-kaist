@@ -87,13 +87,15 @@ typedef int tid_t;
  * blocked state is on a semaphore wait list. */
 struct thread {
 	/* Owned by thread.c. */
-	tid_t tid;                          /* Thread identifier. */
-	enum thread_status status;          /* Thread state. */
-	char name[16];                      /* Name (for debugging purposes). */
-	int priority;                       /* Priority. */
+	tid_t tid;                          /* Thread identifier. *///스레드식별자
+	enum thread_status status;          /* Thread state. *///스레드상태
+	char name[16];                      /* Name (for debugging purposes). *///디버깅목적이름
+	int priority;                       /* Priority. *///우선순위
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+
+	int64_t wake_time; //깨어날 시간
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

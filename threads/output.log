@@ -1,0 +1,6 @@
+cd build && make check
+make[1]: Entering directory '/root/pintos-kaist/threads/build'
+make[1]: *** No rule to make target 'alarm-*.result', needed by 'results'.  Stop.
+make[1]: Leaving directory '/root/pintos-kaist/threads/build'
+../Makefile.kernel:10: recipe for target 'check' failed
+make: *** [check] Error 2
