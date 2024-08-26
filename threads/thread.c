@@ -64,12 +64,16 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
+static bool priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 
-// (P1): thread 재우고 깨우고
+// (P1: Alram clock): thread 재우고 깨우고
 static bool compare_thread(const struct list_elem *a, const struct list_elem *b, void *aux);
 void thread_sleep(int64_t ticks);
 void thread_awake(void);
+
+// (P1:Priority)
+void preempt(void);
 
 
 /* Returns true if T appears to point to a valid thread. */
@@ -219,9 +223,6 @@ tid_t thread_create (const char *name, int priority, thread_func *function, void
 
 	return tid;
 }
-// Busy-waiting을 해결하기 위한 함수
-
-
 /* Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
 
@@ -254,8 +255,10 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	//list_push_back (&ready_list, &t->elem);
+	list_insert_ordered(&ready_list, &t->elem, priority_compare, NULL);
 	t->status = THREAD_READY;
+	preempt();
 	intr_set_level (old_level);
 }
 
@@ -317,11 +320,15 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	
-	//ready_list는 현제 쓰레드들이 일자로 쭉 나열되어 있음
-	// list_push_back으로 현재 쓰레드를 맨 뒤로 보냄
-	if (curr != idle_thread) 
-		list_push_back (&ready_list, &curr->elem);
-	// 
+	// //ready_list는 현제 쓰레드들이 일자로 쭉 나열되어 있음
+	// // list_push_back으로 현재 쓰레드를 맨 뒤로 보냄
+	
+	// 	list_push_back (&ready_list, &curr->elem);
+	if (curr != idle_thread) {
+		list_insert_ordered(&ready_list, &curr->elem, priority_compare, NULL); // 우선순위 대로 삽입
+	}
+	
+	
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -330,6 +337,8 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	preempt();
+	
 }
 
 /* Returns the current thread's priority. */
@@ -549,10 +558,10 @@ do_schedule(int status) {
 	ASSERT (intr_get_level () == INTR_OFF);
 	ASSERT (thread_current()->status == THREAD_RUNNING);
 
-	// 파괴해야할 쓰레드 리스트가 빌때까지, 쓰레드(디스트럯ㄴ 리스트에 담긴 쓰레드들)를 죽여라
+	// 파괴해야할 쓰레드 리스트가 빌때까지, 쓰레드(디스트럭트 리스트에 담긴 쓰레드들)를 죽여라
 	while (!list_empty (&destruction_req)) {
 		// victim은 삭제 할 쓰레드
-		// 리스트엔트리를 통해 삭제할 리스트를 특정함
+		// 리스트엔트리를 통해 삭제할 쓰레드를 특정함
 		struct thread *victim = list_entry (list_pop_front (&destruction_req), struct thread, elem);
 		// 페이지 얼록 프리 페이지를 통해 그 victim을 메모리 반환함.
 		palloc_free_page(victim);
@@ -612,11 +621,19 @@ allocate_tid (void) {
 	return tid;
 }
 
-// (P1): 제울 쓰레드와 현재 sleep_list 의 값들 하나하나 비교 하는 함수
-static bool compare_thread(const struct list_elem *a, const struct list_elem *b, void *aux) {
+// (P1): 제울 쓰레드와 현재 sleep_list 의 ticks들 하나하나 비교 하는 함수
+static bool ticks_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
     struct thread *sa = list_entry(a, struct thread, elem);
     struct thread *sb = list_entry(b, struct thread, elem);
     return sa->wakeup_tick < sb->wakeup_tick;
+}
+// (P1): 제울 쓰레드와 현재 sleep_list 의 priority들 하나하나 비교 하는 함수
+static bool
+priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) 
+{
+    struct thread *ta = list_entry(a, struct thread, elem);
+    struct thread *tb = list_entry(b, struct thread, elem);
+    return ta->priority > tb->priority;
 }
 
 // (P1) thread를 sleep(동작하지 않도록) 하고 sleep_list에 넣기
@@ -630,7 +647,7 @@ void thread_sleep(int64_t ticks) {
 
 	cur->wakeup_tick = timer_ticks() + ticks;// 일어날 시간 넣어주기
 	
-	list_insert_ordered(&sleep_list, &cur->elem, compare_thread, NULL);// 리스트에 넣어주기
+	list_insert_ordered(&sleep_list, &cur->elem, ticks_compare, NULL);// 리스트에 넣어주기
 	thread_block(); // 현재 쓰래드 재우기
 
     intr_set_level(old_level);
@@ -651,4 +668,22 @@ void thread_awake(void) {
             break;
         }
     }
+}
+
+// (P1:P) 현재 쓰레드의 우선순위가 감소 했을때 바로 CPU사용권 넘기기
+void preempt(void) {
+	struct thread *cur = thread_current(); // 현재 쓰레드
+
+	struct thread *t = list_entry(list_begin(&ready_list), struct thread, elem);// ready_list에 가장 높은 우선순위
+
+	if (list_empty(&ready_list)){
+		return;
+	}
+	if (cur == idle_thread){
+		return;
+	}
+
+	if (cur->priority < t->priority){
+		thread_yield();
+	}
 }

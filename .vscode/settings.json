@@ -1,6 +1,11 @@
 {
     "files.associations": {
         "stdint.h": "c",
-        "synch.h": "c"
+        "synch.h": "c",
+        "thread.h": "c",
+        "timer.h": "c",
+        "interrupt.h": "c",
+        "intr-stubs.h": "c",
+        "tests.h": "c"
     }
 }

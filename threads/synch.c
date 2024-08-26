@@ -73,7 +73,7 @@ sema_down (struct semaphore *sema) {
 		list_push_back (&sema->waiters, &thread_current ()->elem);
 		thread_block (); //현재 쓰레드 제우기
 	}
-	sema->value--;
+	sema->value--; // sema-> value가 0이 아닐때
 	intr_set_level (old_level);
 }
 
