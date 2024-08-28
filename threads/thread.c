@@ -62,8 +62,7 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
-static bool priority_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
-void preempt(void);
+
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -218,7 +217,7 @@ thread_create (const char *name, int priority,
 	t->tf.ss = SEL_KDSEG;
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
-
+	
 	/* Add to run queue. */
 	thread_unblock (t);
 
@@ -260,10 +259,17 @@ thread_unblock (struct thread *t) {
 	list_insert_ordered(&ready_list, &t->elem, priority_less, NULL);
 	// 들어올때마다 우선순위 비교 현재 실행중인 쓰레드의 우선순위가 지금 들어오는 쓰레드보다 작다면
 	t->status = THREAD_READY;
+
 	preempt();
+	// struct thread *cur = thread_current();
+	
+	// if (cur->priority < t->priority && cur != idle_thread){
+	// 	thread_yield();
+	// }
+
 	intr_set_level(old_level);
 }
-static bool
+bool
 priority_less(const struct list_elem *a, const struct list_elem *b,void *aux UNUSED){
 	// list_elem을 포함하는 thread 구조체의 포인터를 얻음
 	struct thread *thread_a = list_entry(a, struct thread, elem);
@@ -279,11 +285,7 @@ void preempt(void){
 	// 	return;
 	// }
 
-	if(cur==idle_thread){
-		return;
-	}
-
-	if (cur->priority < t->priority){
+	if (cur->priority < t->priority && cur != idle_thread){
 		thread_yield();
 	}
 }
@@ -356,7 +358,9 @@ thread_yield (void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
+	// thread_current ()->priority = new_priority;
+	thread_current()->original_priority = new_priority;
+	refresh_priority();
 	preempt();
 }
 
@@ -455,6 +459,10 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+
+	t->original_priority = priority;
+	t->wait_on_lock = NULL;
+	list_init(&t->donations);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -633,4 +641,71 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
+}
+
+bool
+thread_compare_donate_priority(const struct list_elem *a, const struct list_elem *b,void *aux UNUSED){
+	// list_elem을 포함하는 thread 구조체의 포인터를 얻음
+	struct thread *thread_a = list_entry(a, struct thread, donation_elem);
+	struct thread *thread_b = list_entry(b, struct thread, donation_elem);
+	return thread_a->priority > thread_b->priority;
+}
+
+void
+donate_priority(void){
+
+	int depth;
+	struct thread *current_thread = thread_current();
+
+	for (depth = 0; depth < 8; depth++){
+		if(!current_thread->wait_on_lock)break;
+			struct thread *holder = current_thread->wait_on_lock->holder;
+			holder->priority = current_thread->priority;
+			current_thread = holder;
+	}
+	// while(current_thread->wait_on_lock){
+	// 	struct thread *holder = current_thread->wait_on_lock->holder;
+	// 	holder->priority = current_thread->priority;
+	// 	current_thread = holder;
+	// }
+}
+
+void 
+remove_with_lock (struct lock *lock){
+	struct list_elem *e;
+	struct thread *current_thread = thread_current();
+
+	for (e = list_begin(&current_thread->donations); e != list_end(&current_thread->donations); e= list_next(e)){
+		struct thread *t = list_entry(e, struct thread, donation_elem);
+		// 여기서 == 을 =로 써줘서 통과가 안됐음!!
+		if(t->wait_on_lock == lock){
+			list_remove(&t->donation_elem);
+	}
+	}
+	// while(!list_empty(&current_thread->donations))
+	// {
+	// 	struct thread *t= list_entry(list_begin(&current_thread->donations),struct thread,donation_elem);
+	// 	if(t->wait_on_lock = lock){
+	// 		list_remove(&t->donation_elem);
+	// 	}
+	// }
+}
+
+void
+refresh_priority(void){
+	struct thread *current_thread = thread_current();
+	//원래 우선순위로 복구
+	current_thread->priority = current_thread->original_priority;
+	//기부 리스트에 쓰레드가 존재하면
+	if(!list_empty(&current_thread->donations)){
+		//기부리스트를 우선순위순으로 정리하고
+		list_sort(&current_thread->donations, thread_compare_donate_priority, NULL);
+		//남아있는 스레드중에 가장 높은 우선순위 스레드를 가져온다.
+		//그거슨 sort 해줬기 때문에 제일 첫번째 스레드겠지
+		struct thread *front = list_entry(list_front(&current_thread->donations), struct thread, donation_elem);
+		//만약  남아있는 스레드중에 가장 높은 우선순위가 현재 스레드보다 높으면 우선순위 기부
+		if(front->priority> current_thread->priority){
+			current_thread->priority = front->priority;
+		}
+	}
 }
