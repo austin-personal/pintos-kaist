@@ -156,7 +156,7 @@ void preempt(void);
 bool priority_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 void preempt(void);
 bool thread_compare_donate_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
-void donate_priority(void);
+void donate_priority(struct thread *holder, int new_priority);
 void remove_with_lock(struct lock *lock);
 void refresh_priority(void);
 #endif /* threads/thread.h */

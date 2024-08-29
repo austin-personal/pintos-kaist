@@ -68,7 +68,7 @@ sema_down (struct semaphore *sema) {
 	old_level = intr_disable ();
 	while (sema->value == 0) {
 		//세마포어 대기 큐 우선순위 기반으로 정렬
-		list_insert_ordered(&sema->waiters, &thread_current ()->elem, &priority_less, NULL);
+		list_insert_ordered(&sema->waiters, &thread_current ()->elem, priority_less, NULL);
 		
 		thread_block ();
 	}
@@ -111,12 +111,17 @@ sema_up (struct semaphore *sema) {
 
 	ASSERT (sema != NULL);
 
-	sema->value++;
 	old_level = intr_disable ();
-	if (!list_empty (&sema->waiters))
-		thread_unblock (list_entry (list_pop_front (&sema->waiters),
-					struct thread, elem));
-	intr_set_level (old_level);
+	if (!list_empty (&sema->waiters)){
+		//donation-sema 케이스 경우에서 H 가 lock을 요청할 때 sema안에 있는 L에게 H의
+		//우선순위를 준다 근데 L은 앞쪽이아니라 M 뒤에있어서 sema_up 시킬 때 한번더 sema
+		//waiter 리스트를 우선순위 순으로 정렬해줘야한다.
+		list_sort(&sema->waiters, priority_less, NULL);
+		thread_unblock (list_entry (list_pop_front (&sema->waiters),struct thread, elem));
+	}
+	sema->value++;
+	preempt();
+	intr_set_level(old_level);
 }
 
 static void sema_test_helper (void *sema_);
@@ -197,7 +202,7 @@ void lock_acquire(struct lock *lock)
 		current_thread->wait_on_lock = lock;
 		// 기부를 하는 스레드 도네이션 목록에 현재 프로세스 elem을 추가
 		list_insert_ordered(&lock->holder->donations, &current_thread->donation_elem, thread_compare_donate_priority, NULL);
-		donate_priority();
+		donate_priority(lock->holder,current_thread->priority);
 	}
 	//lock 에 대한 요청이 들어오면 sema_down에서 멈췄다가 lock이 사용가능하게 되면
 	sema_down(&lock->semaphore);
