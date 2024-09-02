@@ -272,9 +272,8 @@ void thread_unblock(struct thread *t)
 
 	old_level = intr_disable();
 	ASSERT(t->status == THREAD_BLOCKED);
-	// list_push_back (&ready_list, &t->elem);
+	// 우선순위 비교하여 ready리스트에 넣음
 	list_insert_ordered(&ready_list, &t->elem, priority_less, NULL);
-	// 들어올때마다 우선순위 비교 현재 실행중인 쓰레드의 우선순위가 지금 들어오는 쓰레드보다 작다면
 	t->status = THREAD_READY;
 
 	intr_set_level(old_level);
@@ -804,8 +803,7 @@ void mlfqs_calculate_priority(struct thread *t) // 문제 없음
 	// 우선순위 계산
 	int priority_fp = SUB_FP(SUB_FP(INT_FP(PRI_MAX), recent_cpu_term), nice_term);
 	t->priority = FP_TO_INT(priority_fp);
-	// t->priority = FP_TO_INT(SUB_FP(SUB_FP_INT(INT_FP(PRI_MAX), DIV_FP_INT(t->recent_cpu, 4)), INT_FP(t->nice * 2)));
-	// t->priority = FP_TO_INT(ADD_FP_INT(DIV_FP_INT(t->recent_cpu, -4), PRI_MAX - t->nice * 2));
+
 	if (t->priority < PRI_MIN)
 		t->priority = PRI_MIN;
 	else if (t->priority > PRI_MAX)
@@ -817,9 +815,6 @@ void mlfqs_calculate_recent_cpu(struct thread *t)
 	if (t == idle_thread)
 		return;
 	ASSERT(t->nice >= -20 && t->nice <= 20);
-	// int load_avg_2 = MUL_FP_INT(load_avg, 2);
-	// int coefficient = DIV_FP(load_avg_2, ADD_FP_INT(load_avg_2, 1));
-	// t->recent_cpu = ADD_FP_INT(MUL_FP(coefficient, t->recent_cpu), t->nice);
 
 	int coef = DIV_FP(MUL_FP_INT(load_avg, 2), ADD_FP_INT(MUL_FP_INT(load_avg, 2), 1));
 	t->recent_cpu = ADD_FP(MUL_FP(coef, t->recent_cpu), INT_FP(t->nice));
