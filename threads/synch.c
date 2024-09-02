@@ -205,9 +205,10 @@ void lock_acquire(struct lock *lock)
 	if (thread_mlfqs)
 	{
 		sema_down(&lock->semaphore);
-		lock->holder = current_thread;
+		lock->holder = current_thread; // 락을 획득한 후 락 소유자로 설정
 		return;
 	}
+	// 락 소유자가 있는 경우 우선순위 기부 로직 처리
 	if (lock->holder)
 	{ // 내가 요청, 풀리길 기다리는 lock 저장
 		current_thread->wait_on_lock = lock;
@@ -215,10 +216,9 @@ void lock_acquire(struct lock *lock)
 		list_insert_ordered(&lock->holder->donations, &current_thread->donation_elem, thread_compare_donate_priority, NULL);
 		donate_priority(lock->holder, current_thread->priority);
 	}
-	// lock 에 대한 요청이 들어오면 sema_down에서 멈췄다가 lock이 사용가능하게 되면
+	// 락을 대기하고 획득
 	sema_down(&lock->semaphore);
-	// lock을 얻은 후
-	// 자신이 lock을 선점
+	// 락을 획득한 후 락 소유자로 설정
 	current_thread->wait_on_lock = NULL;
 	lock->holder = current_thread;
 	// lock->holder = thread_current();
@@ -257,9 +257,12 @@ void lock_release(struct lock *lock)
 	lock->holder = NULL;
 	if (!thread_mlfqs)
 	{
+		// 현재 락과 관련된 기부 항목을 삭제
 		remove_with_lock(lock);
+		// 우선순위를 기부받기 전의 상태로 되돌리거나, 기부받은 우선순위 중 가장 높은 우선순위를 다시 계산
 		refresh_priority();
 	}
+	// 락을 해제하고 대기 중인 스레드들을 깨움
 	sema_up(&lock->semaphore);
 }
 

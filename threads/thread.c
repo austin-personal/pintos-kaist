@@ -235,7 +235,7 @@ tid_t thread_create(const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock(t);
-
+	// mlfqs때 예외처리 해줄 필요x
 	preempt();
 
 	return tid;
