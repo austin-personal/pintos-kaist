@@ -32,7 +32,7 @@ static void busy_wait(int64_t loops);
 static void real_time_sleep(int64_t num, int32_t denom);
 static bool wake_time_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 // 슬립 상태의 스레드들을 관리하기 위한 리스트
-// 이 리스트는 wakeup_tick 순으로 정렬되어 유지됨
+// 이 리스트는 wake_time 순으로 정렬되어 유지됨
 static struct list sleep_list; // sleep_list 생성
 
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
