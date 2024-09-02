@@ -178,7 +178,7 @@ timer_interrupt(struct intr_frame *args UNUSED)
 			mlfqs_calculate_load_avg();
 			mlfqs_recalculate_recent_cpu();
 			// 디버그용
-			msg("Time: %d, Recalculating recent_cpu for all threads\n", ticks / TIMER_FREQ);
+			// msg("Time: %d, Recalculating recent_cpu for all threads\n", ticks / TIMER_FREQ);
 		}
 		if (ticks % 4 == 0)
 		{

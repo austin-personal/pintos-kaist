@@ -205,7 +205,7 @@ void lock_acquire(struct lock *lock)
 	if (thread_mlfqs)
 	{
 		sema_down(&lock->semaphore);
-		lock->holder = thread_current();
+		lock->holder = current_thread;
 		return;
 	}
 	if (lock->holder)
@@ -259,11 +259,6 @@ void lock_release(struct lock *lock)
 	{
 		remove_with_lock(lock);
 		refresh_priority();
-	}
-	else
-	{
-		sema_up(&lock->semaphore);
-		return;
 	}
 	sema_up(&lock->semaphore);
 }
