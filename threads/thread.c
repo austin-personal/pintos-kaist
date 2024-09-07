@@ -223,7 +223,7 @@ tid_t thread_create(const char *name, int priority,
 	t->recent_cpu = thread_current()->recent_cpu;
 	// 부모 스레드의 nice,recent_cpu 값 상속
 	/* Call the kernel_thread if it scheduled.
-	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
+	 * Note) rdi is 1st argument, and rsi is 2nd argumnt. */
 	t->tf.rip = (uintptr_t)kernel_thread;
 	t->tf.R.rdi = (uint64_t)function;
 	t->tf.R.rsi = (uint64_t)aux;
@@ -530,6 +530,8 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->magic = THREAD_MAGIC;
 	t->original_priority = priority;
 	t->wait_on_lock = NULL;
+
+	t->is_user = false;
 	list_init(&t->donations);
 
 	/* Add to the all_list. */

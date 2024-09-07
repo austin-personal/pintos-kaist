@@ -120,6 +120,11 @@ struct thread
 	/* Owned by thread.c. */
 	struct intr_frame tf; /* Information for switching */
 	unsigned magic;		  /* Detects stack overflow. */
+
+	bool is_user;
+
+	int exit_status;		   // 프로세스 종료 상태
+	struct file *fd_table[32]; // 파일 디스크립터 생성
 };
 
 /* If false (default), use round-robin scheduler.

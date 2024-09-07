@@ -51,6 +51,12 @@ tid_t process_create_initd(const char *file_name)
 		return TID_ERROR;
 	strlcpy(fn_copy, file_name, PGSIZE);
 
+	char *save_ptr;
+
+	// 명령어 파싱: file_name을 공백을 기준으로 자름
+	// 안자르면 스레드 네임에 인자까지 들어감
+	file_name = strtok_r(file_name, " ", &save_ptr);
+
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create(file_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
@@ -189,6 +195,7 @@ int process_exec(void *f_name)
 	if (!success)
 		return -1;
 
+	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 	/* Start switched process. */
 	do_iret(&_if);
 	NOT_REACHED();
@@ -208,9 +215,10 @@ int process_wait(tid_t child_tid UNUSED)
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	while (1)
+	int i = 0;
+	while (i <= 1 << 30)
 	{
-		continue;
+		i++;
 	}
 	return -1;
 }
@@ -223,6 +231,11 @@ void process_exit(void)
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
+	if (curr->is_user)
+	{
+
+		printf("%s: exit(%d)\n", curr->name, curr->exit_status);
+	}
 
 	process_cleanup();
 }
@@ -346,22 +359,19 @@ load(const char *file_name, struct intr_frame *if_)
 	char *argv[128];
 	int argc = 0;
 
-	uint64_t *argv_addresses[128]; // 각 인자의 주소를 저장할 배열
 	// 명령어 파싱: file_name을 공백을 기준으로 토큰화하여 argv에 저장
 	token = strtok_r(file_name, " ", &save_ptr);
 	while (token != NULL)
 	{
 		argv[argc] = token;
 		argc++;
+		// printf("token: %s\n", argv[argc - 1]);
 		token = strtok_r(NULL, " ", &save_ptr);
 	}
-	int j = 0;
-	argv[argc] = NULL; // 인자 목록 끝에 NULL 추가
-	while (argv[j] != NULL)
-	{
-		printf("파싱하고 배열에 잘 들어갔음 : %s\n", argv[j]);
-		j++;
-	}
+
+	// argc 값이 계산 되고 난 후 인자들의 주소를 담을 배열 크기를 정함
+	uint64_t *argv_addresses[argc]; // 각 인자의 주소를 저장할 배열
+	// argv[argc] = NULL;				// 인자 목록 끝에 NULL 추가
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create();
 	if (t->pml4 == NULL)
@@ -451,48 +461,52 @@ load(const char *file_name, struct intr_frame *if_)
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-	uintptr_t *esp = if_->rsp;
+	// 8바이트 포인터
+	uintptr_t esp = if_->rsp;
 	// 1. rsp값을 낮춰가며 stack에 프로그램 이름과 인자 값을 넣어준다.
 	for (int i = argc - 1; i >= 0; i--)
 	{
 		esp -= strlen(argv[i]) + 1;
-		memcpy((void *)esp, argv[i], strlen(argv[i]) + 1); // 인자 값을 스택에 복사
-		argv_addresses[i] = (uint64_t *)esp;
-		printf("인자 값 스택에 잘 복사되었음: %s\n", (char *)esp);
+		memcpy(esp, argv[i], strlen(argv[i]) + 1); // 인자 값을 스택에 복사
+		argv_addresses[i] = esp;
+		// printf("인자 값 스택에 잘 복사되었음: %s\n", (char *)esp);
 	}
-	// 2. 8의 배수 바이트 수로 맞춰주기 위해 패딩값을 넣는다.
-	while ((uintptr_t)esp % 8 != 0)
+	// // 2. 8의 배수 바이트 수로 맞춰주기 위해 패딩값을 넣는다.
+	while (esp % 8 != 0)
 	{
 		esp--;
+		// 1바이트 짜리 포인터로 형변환
 		*(uint8_t *)esp = 0;
-		printf("패딩 값 스택에 잘 복사되었음: %d\n", *(uint8_t *)esp);
+		// printf("패딩 값 스택에 잘 복사되었음: %d\n", *(uint8_t *)esp);
 	}
 	// 3. NULL포인터 추가
 	esp -= sizeof(char *);
-	*(char **)esp = NULL;
-	printf("argv[%d] NULL 값 스택에 잘 복사되었음: %d\n", argc, *(char *)esp);
+	*(char **)esp = 0;
+	// 위와 결과가 같음
+	// *esp = 0;
+	// printf("argv[%d] NULL 값 스택에 잘 복사되었음: %d\n", argc, *(char *)esp);
 	// 4.rsp값을 낮춰가며 stack에 프로그램 이름 주소와 인자 주소를 넣어준다.
 	for (int i = argc - 1; i >= 0; i--)
 	{
 		esp -= sizeof(char *);
 
-		memcpy((void *)esp, &argv_addresses[i], sizeof(char *)); // 인자 값을 스택에 복사
-		printf("인자 주소 스택에 잘 복사되었음: %p\n", *(char **)esp);
-		printf("인자 주소에 있는 값: %s\n", *(char **)esp);
+		memcpy(esp, &argv_addresses[i], sizeof(char *)); // 인자 값을 스택에 복사
+														 // printf("인자 주소 스택에 잘 복사되었음: %p\n", *(char **)esp);
+														 // printf("인자 주소에 있는 값: %s\n", *(char **)esp);
 	}
 	/* 4-1. argv의 시작 주소 저장 */
-	char **start_argv = (char **)esp;
+	uintptr_t start_argv = esp;
 	// 5.return address 값 stack에 넣기
 	esp -= sizeof(void *);
 	*(void **)esp = 0;
-	printf("가짜 return address 값 스택에 잘 복사되었음: %d\n", *(void **)esp);
+	// printf("가짜 return address 값 스택에 잘 복사되었음: %d\n", *(void **)esp);
 	//%rsi 가 argv 주소(argv[0]의 주소)를 가리키게 하고, %rdi 를 argc 로 설정
 	if_->rsp = esp;
-	printf("RSP: %p\n", (void *)if_->rsp);
+	// printf("RSP: %p\n", (void *)if_->rsp);
 	if_->R.rdi = argc;
-	if_->R.rsi = (uintptr_t)start_argv;
-	printf("RDI: %d\n", if_->R.rdi);
-	printf("RSI: %p\n", (void *)if_->R.rsi);
+	if_->R.rsi = start_argv;
+	// printf("RDI: %d\n", if_->R.rdi);
+	// printf("RSI: %p\n", (void *)if_->R.rsi);
 
 	success = true;
 
