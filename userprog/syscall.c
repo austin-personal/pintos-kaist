@@ -101,10 +101,13 @@ void sys_exit(int status)
 }
 bool sys_create(const char *file, unsigned initial_size)
 {
-	struct thread *cur = thread_current();
-	if (file == "" || file == NULL || initial_size == 0 || initial_size == NULL)
+	if (!is_user_vaddr(file))
 	{
-		// cur->exit_status = -1;
+		return false;
+	}
+	if (file == "" || file == NULL)
+	{
+
 		return false;
 	}
 	return filesys_create(file, initial_size);
@@ -118,7 +121,13 @@ int sys_write(int fd, const void *buffer, unsigned size)
 {
 	if (fd == 1)
 	{
+
 		putbuf(buffer, size);
+		// printf("%d %s %d\n", fd, buffer, size);
 		return size;
 	}
+}
+// 유효포인터 체크 함수
+void check_ptr(const char *file)
+{
 }
