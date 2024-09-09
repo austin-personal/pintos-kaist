@@ -15,6 +15,7 @@
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
 #include "threads/thread.h"
+#include "threads/synch.h"
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
@@ -60,7 +61,22 @@ tid_t process_create_initd(const char *file_name)
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create(file_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
+	{
+
 		palloc_free_page(fn_copy);
+	}
+	else
+	{
+		for (int i = 0; i < 32; i++)
+		{
+			if (thread_current()->child_tid[i] == -1)
+			{
+				thread_current()->child_tid[i] = tid;
+				break;
+			}
+		}
+	}
+
 	return tid;
 }
 
@@ -179,6 +195,7 @@ int process_exec(void *f_name)
 	 * This is because when current thread rescheduled,
 	 * it stores the execution information to the member. */
 	struct intr_frame _if;
+
 	memset(&_if, 0, sizeof _if); // intr_frame 구조체 초기화
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
@@ -215,17 +232,26 @@ int process_wait(tid_t child_tid UNUSED)
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	int i = 0;
-	while (i <= 1 << 30)
+	// 부모
+	struct thread *cur = thread_current();
+	//  child_tid 가 자기 자식인 지 확인
+	for (int i = 0; i < 32; i++)
 	{
-		i++;
+		if (child_tid == cur->child_tid[i])
+		{
+			break;
+		}
+		else
+		{
+			return -1;
+		}
 	}
-	i = 0;
-	while (i <= 1 << 30)
-	{
-		i++;
-	}
-	return -1;
+	// 맞다면 일로 넘어가겠지
+	struct semaphore sema; // 세마포어안에 넣어야하니까 세마포어 구조체 선언
+	sema_init(&sema, 0);   // 세마포어 초기화
+	cur->wait_sema = &sema;
+
+	sema_down(cur->wait_sema);
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -240,8 +266,21 @@ void process_exit(void)
 	{
 
 		printf("%s: exit(%d)\n", curr->name, curr->exit_status);
+		// process_wait///////////
+		// 부모 프로세스에게 신호 보내기
+		if (curr->parent != NULL)
+			sema_up(curr->parent->wait_sema);
+		// chid_tid 리스트 정리
+		for (int i = 0; i < 32; i++)
+		{
+			if (curr->tid == curr->parent->child_tid[i])
+			{
+				curr->parent->child_tid[i] = -1;
+				break;
+			}
+		}
+		/////////////////////////
 	}
-
 	process_cleanup();
 }
 

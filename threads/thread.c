@@ -221,6 +221,7 @@ tid_t thread_create(const char *name, int priority,
 	tid = t->tid = allocate_tid();
 	t->nice = thread_current()->nice;
 	t->recent_cpu = thread_current()->recent_cpu;
+	t->parent = thread_current();
 	// 부모 스레드의 nice,recent_cpu 값 상속
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argumnt. */
@@ -529,10 +530,11 @@ init_thread(struct thread *t, const char *name, int priority)
 
 	t->magic = THREAD_MAGIC;
 	t->original_priority = priority;
-	t->wait_on_lock = NULL;
-
+	t->wait_on_lock = NULL; // initial 스레드를 부모로 지정
 	t->is_user = false;
 	list_init(&t->donations);
+	t->parent = NULL;							  // 부모 초기화
+	memset(t->child_tid, -1, sizeof(tid_t) * 32); // child_tid 배열 초기화
 
 	/* Add to the all_list. */
 	list_push_back(&all_list, &t->allelem); // all_list에 initial 스레드 추가
@@ -873,4 +875,28 @@ void mlfqs_recalculate_priority(void)
 
 		mlfqs_calculate_priority(t);
 	}
+}
+// 죽은 자식 스레드를 가져오는 함수
+struct thread *thread_get_child(tid_t child_tid)
+{
+	struct thread *cur = thread_current();
+	struct thread *child = NULL;
+	struct list_elem *e;
+
+	for (e = list_begin(&destruction_req); e != list_end(&destruction_req); e = list_next(e))
+	{
+		struct thread *t = list_entry(e, struct thread, elem);
+		if (t->tid == child_tid && t->parent == cur)
+		{
+			child = t;
+			break;
+		}
+	}
+	return child;
+}
+
+void thread_remove_child(struct thread *child)
+{
+	list_remove(&child->elem);
+	palloc_free_page(child);
 }

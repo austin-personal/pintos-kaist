@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -111,6 +112,14 @@ struct thread
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4; /* Page map level 4 */
+	bool is_user;
+	int exit_status; // 프로세스 종료 상태
+	// process_wait/////////////
+	struct semaphore *wait_sema;
+	struct thread *parent; // 부모 프로세스 포인터 저장
+	tid_t child_tid[32];   // 자식 tid 저장하는 리스트
+	///////////////////////////
+	struct file *fd_table[32]; // 파일 디스크립터 생성
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
@@ -120,11 +129,6 @@ struct thread
 	/* Owned by thread.c. */
 	struct intr_frame tf; /* Information for switching */
 	unsigned magic;		  /* Detects stack overflow. */
-
-	bool is_user;
-
-	int exit_status;		   // 프로세스 종료 상태
-	struct file *fd_table[32]; // 파일 디스크립터 생성
 };
 
 /* If false (default), use round-robin scheduler.
@@ -181,5 +185,8 @@ bool thread_compare_donate_priority(const struct list_elem *a, const struct list
 void donate_priority(struct thread *holder, int new_priority);
 void remove_with_lock(struct lock *lock);
 void refresh_priority(void);
+
+struct thread *thread_get_child(tid_t child_tid);
+void thread_remove_child(struct thread *child);
 
 #endif /* threads/thread.h */
