@@ -18,7 +18,9 @@ void sys_exit(int status);
 bool sys_create(const char *file, unsigned initial_size);
 int sys_open(const char *file);
 int sys_close(int fd);
+int sys_read(int fd, void *buffer, unsigned size);
 int sys_write(int fd, const void *buffer, unsigned size);
+int sys_filesize(int fd);
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -74,12 +76,21 @@ void syscall_handler(struct intr_frame *f)
 	break;
 	case SYS_OPEN:
 	{
+
 		f->R.rax = sys_open(f->R.rdi);
 	}
 	break;
 	case SYS_CLOSE:
 	{
 		sys_close(f->R.rdi);
+	}
+	break;
+	case SYS_READ:
+	{
+		int fd = f->R.rdi;
+		void *buffer = f->R.rsi;
+		unsigned size = f->R.rdx;
+		f->R.rax = sys_read(fd, buffer, size);
 	}
 	break;
 	case SYS_WRITE:
@@ -89,6 +100,11 @@ void syscall_handler(struct intr_frame *f)
 		unsigned size = f->R.rdx;
 		f->R.rax = sys_write(fd, buffer, size);
 		// printf("%d %s %d\n", fd, buffer, size);
+	}
+	break;
+	case SYS_FILESIZE:
+	{
+		f->R.rax = sys_filesize(f->R.rdi);
 	}
 	break;
 	default:
@@ -161,8 +177,24 @@ int sys_close(int fd)
 	}
 }
 
+int sys_read(int fd, void *buffer, unsigned size)
+{
+	check_ptr(buffer);
+	if (!is_user_vaddr(fd) || fd >= 32 || fd < 0)
+	{
+		return;
+	}
+	struct thread *t = thread_current();
+	if (t->fd_table[fd] != NULL)
+	{
+		return file_read(t->fd_table[fd], buffer, size);
+	}
+	return -1;
+}
+
 int sys_write(int fd, const void *buffer, unsigned size)
 {
+
 	check_ptr(buffer);
 	if (fd == 1)
 	{
@@ -172,6 +204,13 @@ int sys_write(int fd, const void *buffer, unsigned size)
 		return size;
 	}
 }
+
+int sys_filesize(int fd)
+{
+	struct thread *t = thread_current();
+	return file_length(t->fd_table[fd]);
+}
+
 // 유효포인터 체크 함수
 void check_ptr(const void *ptr)
 {
