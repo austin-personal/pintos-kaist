@@ -101,6 +101,7 @@ void sys_exit(int status)
 }
 bool sys_create(const char *file, unsigned initial_size)
 {
+	check_ptr(file);
 	if (!is_user_vaddr(file))
 	{
 		return false;
@@ -119,6 +120,7 @@ int sys_open(const char *file)
 }
 int sys_write(int fd, const void *buffer, unsigned size)
 {
+	check_ptr(buffer);
 	if (fd == 1)
 	{
 
@@ -128,6 +130,11 @@ int sys_write(int fd, const void *buffer, unsigned size)
 	}
 }
 // 유효포인터 체크 함수
-void check_ptr(const char *file)
+void check_ptr(const void *ptr)
 {
+	struct thread *cur = thread_current();
+	if (pml4_get_page(cur->pml4, ptr) == NULL)
+	{
+		sys_exit(-1);
+	}
 }

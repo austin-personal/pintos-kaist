@@ -220,6 +220,11 @@ int process_wait(tid_t child_tid UNUSED)
 	{
 		i++;
 	}
+	i = 0;
+	while (i <= 1 << 30)
+	{
+		i++;
+	}
 	return -1;
 }
 
