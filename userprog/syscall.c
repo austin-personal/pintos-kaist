@@ -12,10 +12,12 @@
 #include "userprog/process.h"
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
+void check_ptr(const void *ptr);
 void sys_halt(void);
 void sys_exit(int status);
 bool sys_create(const char *file, unsigned initial_size);
 int sys_open(const char *file);
+int sys_close(int fd);
 int sys_write(int fd, const void *buffer, unsigned size);
 /* System call.
  *
@@ -75,6 +77,11 @@ void syscall_handler(struct intr_frame *f)
 		f->R.rax = sys_open(f->R.rdi);
 	}
 	break;
+	case SYS_CLOSE:
+	{
+		sys_close(f->R.rdi);
+	}
+	break;
 	case SYS_WRITE:
 	{
 		int fd = f->R.rdi;
@@ -116,8 +123,44 @@ bool sys_create(const char *file, unsigned initial_size)
 
 int sys_open(const char *file)
 {
+	check_ptr(file);
 	struct file *f = filesys_open(file);
+	if (f == NULL)
+	{
+		return -1;
+	}
+	else
+	{
+		struct thread *t = thread_current();
+		int fd;
+		for (fd = 3; fd < 32; fd++)
+		{
+			if (t->fd_table[fd] == NULL)
+			{
+
+				t->fd_table[fd] = f;
+				return fd;
+			}
+		}
+		file_close(f);
+		return -1;
+	}
 }
+
+int sys_close(int fd)
+{
+	struct thread *t = thread_current();
+	if (!is_user_vaddr(fd) || fd >= 32 || fd < 0)
+	{
+		return;
+	}
+	if (t->fd_table[fd] != NULL)
+	{
+		file_close(t->fd_table[fd]);
+		t->fd_table[fd] = NULL;
+	}
+}
+
 int sys_write(int fd, const void *buffer, unsigned size)
 {
 	check_ptr(buffer);
