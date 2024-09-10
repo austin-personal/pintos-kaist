@@ -15,6 +15,8 @@
         "file.h": "c",
         "process.h": "c",
         "filesys.h": "c",
-        "timer.h": "c"
+        "timer.h": "c",
+        "palloc.h": "c",
+        "intrinsic.h": "c"
     }
 }

@@ -10,6 +10,7 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "userprog/process.h"
+#include "threads/palloc.h"
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 void check_ptr(const void *ptr);
@@ -21,6 +22,7 @@ int sys_close(int fd);
 int sys_read(int fd, void *buffer, unsigned size);
 int sys_write(int fd, const void *buffer, unsigned size);
 int sys_filesize(int fd);
+int sys_exec(const char *cmd_line);
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -107,8 +109,22 @@ void syscall_handler(struct intr_frame *f)
 		f->R.rax = sys_filesize(f->R.rdi);
 	}
 	break;
+	case SYS_EXEC:
+	{
+		sys_exec(f->R.rdi);
+	}
+	break;
 	default:
 		thread_exit();
+	}
+}
+// 유효포인터 체크 함수
+void check_ptr(const void *ptr)
+{
+	struct thread *cur = thread_current();
+	if (pml4_get_page(cur->pml4, ptr) == NULL)
+	{
+		sys_exit(-1);
 	}
 }
 void sys_halt(void)
@@ -223,11 +239,15 @@ int sys_filesize(int fd)
 	return file_length(t->fd_table[fd]);
 }
 
-// 유효포인터 체크 함수
-void check_ptr(const void *ptr)
+int sys_exec(const char *cmd_line)
 {
-	struct thread *cur = thread_current();
-	if (pml4_get_page(cur->pml4, ptr) == NULL)
+	check_ptr(cmd_line);
+	char *cl_copy;
+	cl_copy = palloc_get_page(0);
+	if (cl_copy == NULL)
+		return TID_ERROR;
+	strlcpy(cl_copy, cmd_line, PGSIZE);
+	if (process_exec(cl_copy) < 0)
 	{
 		sys_exit(-1);
 	}
