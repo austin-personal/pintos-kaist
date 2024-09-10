@@ -187,6 +187,5 @@ void remove_with_lock(struct lock *lock);
 void refresh_priority(void);
 
 struct thread *thread_get_child(tid_t child_tid);
-void thread_remove_child(struct thread *child);
 
 #endif /* threads/thread.h */

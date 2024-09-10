@@ -533,13 +533,19 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->wait_on_lock = NULL; // initial 스레드를 부모로 지정
 	t->is_user = false;
 	list_init(&t->donations);
-	t->parent = NULL;							  // 부모 초기화
+	if (t == initial_thread)
+	{
+		t->parent = NULL; // 부모 초기화
+	}
+	else
+	{
+		t->parent = thread_current();
+	}
 	memset(t->child_tid, -1, sizeof(tid_t) * 32); // child_tid 배열 초기화
 	// 기본적으로 할당되는 파일 디스크립터
 	t->fd_table[0] = STDIN_FILENO;
 	t->fd_table[1] = STDOUT_FILENO;
 	t->fd_table[2] = STDERR_FILENO;
-
 	/* Add to the all_list. */
 	list_push_back(&all_list, &t->allelem); // all_list에 initial 스레드 추가
 }
@@ -890,17 +896,11 @@ struct thread *thread_get_child(tid_t child_tid)
 	for (e = list_begin(&destruction_req); e != list_end(&destruction_req); e = list_next(e))
 	{
 		struct thread *t = list_entry(e, struct thread, elem);
-		if (t->tid == child_tid && t->parent == cur)
+		if (t->tid == child_tid)
 		{
 			child = t;
 			break;
 		}
 	}
 	return child;
-}
-
-void thread_remove_child(struct thread *child)
-{
-	list_remove(&child->elem);
-	palloc_free_page(child);
 }

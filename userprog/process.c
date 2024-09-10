@@ -94,14 +94,37 @@ initd(void *f_name)
 		PANIC("Fail to launch initd\n");
 	NOT_REACHED();
 }
-
+struct parent_tif
+{
+	struct thread *t;
+	struct intr_frame *if_;
+};
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
 tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 {
+	tid_t child_tid;
+	struct parent_tif parent_args;
+	parent_args.t = thread_current();
+	parent_args.if_ = if_;
 	/* Clone current thread to new thread.*/
-	return thread_create(name,
-						 PRI_DEFAULT, __do_fork, thread_current());
+	child_tid = thread_create(name, PRI_DEFAULT, __do_fork, &parent_args);
+
+	for (int i = 0; i < 32; i++)
+	{
+		if (thread_current()->child_tid[i] == -1)
+		{
+
+			thread_current()->child_tid[i] = child_tid;
+		}
+	}
+
+	struct semaphore sema; // 세마포어안에 넣어야하니까 세마포어 구조체 선언
+	sema_init(&sema, 0);   // 세마포어 초기화
+	thread_current()->wait_sema = &sema;
+	sema_down(&sema);
+	// 자식 프로세스의 pid를 반환
+	return child_tid;
 }
 
 #ifndef VM
@@ -117,22 +140,27 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 	bool writable;
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
-
+	if (is_kernel_vaddr(va))
+		return true;
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page(parent->pml4, va);
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
-
+	newpage = palloc_get_page(PAL_USER);
+	if (newpage == NULL)
+		return false;
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
-
+	memcpy(newpage, parent_page, PGSIZE);
+	writable = is_writable(pte);
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
 	if (!pml4_set_page(current->pml4, va, newpage, writable))
 	{
 		/* 6. TODO: if fail to insert page, do error handling. */
+		palloc_free_page(newpage);
 	}
 	return true;
 }
@@ -146,12 +174,12 @@ static void
 __do_fork(void *aux)
 {
 	struct intr_frame if_;
-	struct thread *parent = (struct thread *)aux;
+	struct parent_tif *parent_args = (struct parent_tif *)aux;
 	struct thread *current = thread_current();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-	struct intr_frame *parent_if;
+	struct thread *parent = parent_args->t;
+	struct intr_frame *parent_if = parent_args->if_;
 	bool succ = true;
-
 	/* 1. Read the cpu context to local stack. */
 	memcpy(&if_, parent_if, sizeof(struct intr_frame));
 
@@ -169,17 +197,39 @@ __do_fork(void *aux)
 	if (!pml4_for_each(parent->pml4, duplicate_pte, parent))
 		goto error;
 #endif
-
 	/* TODO: Your code goes here.
 	 * TODO: Hint) To duplicate the file object, use `file_duplicate`
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
+	for (int i = 0; i < 32; i++)
+	{
+		if (parent->fd_table[i] != -1)
+		{
+			// current->fd_table[i] = file_duplicate(parent->fd_table[i]);
+
+			if (current->fd_table[i] == -1)
+			{
+				for (int j = 0; j < i; j++)
+				{
+					if (current->fd_table[j] != -1)
+					{
+						file_close(current->fd_table[j]);
+					}
+				}
+				pml4_destroy(current->pml4);
+				return TID_ERROR;
+			}
+		}
+	}
 
 	process_init();
-
+	if_.R.rax = 0;
+	// fork 완료되면 깨우기
+	sema_up(parent->wait_sema);
 	/* Finally, switch to the newly created process. */
 	if (succ)
+
 		do_iret(&if_);
 error:
 	thread_exit();
@@ -233,25 +283,31 @@ int process_wait(tid_t child_tid UNUSED)
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
 	// 부모
+	// printf("child_tid :%d\n", child_tid);
 	struct thread *cur = thread_current();
+	// printf("mother name : %s\n", cur->name);
+	// 죽은 자식 스레드를 가져오는 함수
+
 	//  child_tid 가 자기 자식인 지 확인
 	for (int i = 0; i < 32; i++)
 	{
 		if (child_tid == cur->child_tid[i])
 		{
-			break;
-		}
-		else
-		{
-			return -1;
+			// 맞다면 일로 넘어가겠지
+			struct semaphore sema; // 세마포어안에 넣어야하니까 세마포어 구조체 선언
+			sema_init(&sema, 0);   // 세마포어 초기화
+			cur->wait_sema = &sema;
+			struct thread *child_t = thread_get_child(child_tid);
+			if (child_t == NULL)
+			{
+				sema_down(cur->wait_sema);
+			}
+
+			return thread_get_child(child_tid)->exit_status;
+			// printf("%d\n", child_t->exit_status);
 		}
 	}
-	// 맞다면 일로 넘어가겠지
-	struct semaphore sema; // 세마포어안에 넣어야하니까 세마포어 구조체 선언
-	sema_init(&sema, 0);   // 세마포어 초기화
-	cur->wait_sema = &sema;
-
-	sema_down(cur->wait_sema);
+	return -1;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -269,16 +325,20 @@ void process_exit(void)
 		// process_wait///////////
 		// 부모 프로세스에게 신호 보내기
 		if (curr->parent != NULL)
-			sema_up(curr->parent->wait_sema);
-		// chid_tid 리스트 정리
-		for (int i = 0; i < 32; i++)
 		{
-			if (curr->tid == curr->parent->child_tid[i])
-			{
-				curr->parent->child_tid[i] = -1;
-				break;
-			}
+			sema_up(curr->parent->wait_sema);
 		}
+		// chid_tid 리스트 정리
+		// for (int i = 0; i < 32; i++)
+		// {
+
+		// 	if (curr->tid == curr->parent->child_tid[i])
+		// 	{
+		// 		curr->parent->child_tid[i] = -1;
+		// 		break;
+		// 	}
+		// }
+
 		/////////////////////////
 	}
 	process_cleanup();

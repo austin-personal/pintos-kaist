@@ -1,6 +1,7 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
+#include <user/syscall.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/loader.h"
@@ -22,6 +23,8 @@ int sys_close(int fd);
 int sys_read(int fd, void *buffer, unsigned size);
 int sys_write(int fd, const void *buffer, unsigned size);
 int sys_filesize(int fd);
+pid_t sys_fork(const char *thread_name, struct intr_frame *f);
+int sys_wait(pid_t pid);
 int sys_exec(const char *cmd_line);
 /* System call.
  *
@@ -107,6 +110,16 @@ void syscall_handler(struct intr_frame *f)
 	case SYS_FILESIZE:
 	{
 		f->R.rax = sys_filesize(f->R.rdi);
+	}
+	break;
+	case SYS_FORK:
+	{
+		f->R.rax = sys_fork(f->R.rdi, f);
+	}
+	break;
+	case SYS_WAIT:
+	{
+		f->R.rax = sys_wait(f->R.rdi);
 	}
 	break;
 	case SYS_EXEC:
@@ -237,6 +250,33 @@ int sys_filesize(int fd)
 {
 	struct thread *t = thread_current();
 	return file_length(t->fd_table[fd]);
+}
+
+pid_t sys_fork(const char *thread_name, struct intr_frame *f)
+{
+
+	pid_t pid;
+	char *fn_copy;
+	fn_copy = palloc_get_page(0);
+	if (fn_copy == NULL)
+		return TID_ERROR;
+	strlcpy(fn_copy, thread_name, PGSIZE);
+	pid = process_fork(fn_copy, f);
+	// 복제된 프로세스도 자식으로 넣음
+
+	// printf("fork pid :%d\n", pid);
+	if (pid == TID_ERROR)
+	{
+		palloc_free_page(fn_copy);
+	}
+
+	return pid;
+}
+
+int sys_wait(pid_t pid)
+{
+
+	return process_wait(pid);
 }
 
 int sys_exec(const char *cmd_line)
