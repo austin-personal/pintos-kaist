@@ -184,6 +184,10 @@ int sys_read(int fd, void *buffer, unsigned size)
 	{
 		return;
 	}
+	if (fd == 1)
+	{
+		sys_exit(-1);
+	}
 	struct thread *t = thread_current();
 	if (t->fd_table[fd] != NULL)
 	{
@@ -194,14 +198,22 @@ int sys_read(int fd, void *buffer, unsigned size)
 
 int sys_write(int fd, const void *buffer, unsigned size)
 {
-
+	// printf("%d %s %d\n", fd, buffer, size);
 	check_ptr(buffer);
+	if (!is_user_vaddr(fd) || fd >= 32 || fd <= 0)
+	{
+		sys_exit(-1);
+	}
+	struct thread *t = thread_current();
 	if (fd == 1)
 	{
-
 		putbuf(buffer, size);
 		// printf("%d %s %d\n", fd, buffer, size);
 		return size;
+	}
+	else
+	{
+		return file_write(t->fd_table[fd], buffer, size);
 	}
 }
 

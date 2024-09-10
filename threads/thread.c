@@ -535,6 +535,10 @@ init_thread(struct thread *t, const char *name, int priority)
 	list_init(&t->donations);
 	t->parent = NULL;							  // 부모 초기화
 	memset(t->child_tid, -1, sizeof(tid_t) * 32); // child_tid 배열 초기화
+	// 기본적으로 할당되는 파일 디스크립터
+	t->fd_table[0] = STDIN_FILENO;
+	t->fd_table[1] = STDOUT_FILENO;
+	t->fd_table[2] = STDERR_FILENO;
 
 	/* Add to the all_list. */
 	list_push_back(&all_list, &t->allelem); // all_list에 initial 스레드 추가
