@@ -142,7 +142,7 @@ page_fault(struct intr_frame *f)
 	not_present = (f->error_code & PF_P) == 0;
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
-
+	// 민경추가, bad 6총사 통과
 	if (user || not_present)
 		sys_exit(-1);
 
