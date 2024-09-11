@@ -202,24 +202,24 @@ __do_fork(void *aux)
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
-	for (int i = 0; i < 32; i++)
+	for (int i = 3; i < 32; i++)
 	{
-		if (parent->fd_table[i] != -1)
+		if (parent->fd_table[i] != NULL)
 		{
-			// current->fd_table[i] = file_duplicate(parent->fd_table[i]);
+			current->fd_table[i] = file_duplicate(parent->fd_table[i]);
 
-			if (current->fd_table[i] == -1)
-			{
-				for (int j = 0; j < i; j++)
-				{
-					if (current->fd_table[j] != -1)
-					{
-						file_close(current->fd_table[j]);
-					}
-				}
-				pml4_destroy(current->pml4);
-				return TID_ERROR;
-			}
+			// if (current->fd_table[i] == -1)
+			// {
+			// 	for (int j = 0; j < i; j++)
+			// 	{
+			// 		if (current->fd_table[j] != -1)
+			// 		{
+			// 			file_close(current->fd_table[j]);
+			// 		}
+			// 	}
+			// 	pml4_destroy(current->pml4);
+			// 	return TID_ERROR;
+			// }
 		}
 	}
 
@@ -302,12 +302,18 @@ int process_wait(tid_t child_tid UNUSED)
 			{
 				sema_down(cur->wait_sema);
 			}
-
-			return thread_get_child(child_tid)->exit_status;
-			// printf("%d\n", child_t->exit_status);
+			// 무덤에서 찾은 자식은 자식리스트에서 빼줘야 함
+			// 그래야 새 자식을 받을 수 있음
+			cur->child_tid[i] = -1;
+			struct thread *child_t_2 = thread_get_child(child_tid);
+			// printf("my : %d\n", child_t_2->exit_status);
+			return child_t_2->exit_status;
 		}
 	}
 	return -1;
+	// struct thread *child_t_3 = thread_get_child(child_tid);
+	// printf("my : %d\n", child_t_3->exit_status);
+	// return thread_get_child(child_tid)->exit_status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
