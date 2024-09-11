@@ -18,6 +18,7 @@ void check_ptr(const void *ptr);
 void sys_halt(void);
 void sys_exit(int status);
 bool sys_create(const char *file, unsigned initial_size);
+bool sys_remove(const char *file);
 int sys_open(const char *file);
 int sys_close(int fd);
 int sys_read(int fd, void *buffer, unsigned size);
@@ -26,6 +27,8 @@ int sys_filesize(int fd);
 pid_t sys_fork(const char *thread_name, struct intr_frame *f);
 int sys_wait(pid_t pid);
 int sys_exec(const char *cmd_line);
+void sys_seek(int fd, unsigned position);
+unsigned sys_tell(int fd);
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -75,8 +78,14 @@ void syscall_handler(struct intr_frame *f)
 	break;
 	case SYS_CREATE:
 	{
-		// printf("%s %d\n", f->R.rdi, f->R.rsi);
+
 		f->R.rax = sys_create(f->R.rdi, f->R.rsi);
+	}
+	break;
+	case SYS_REMOVE:
+	{
+
+		f->R.rax = sys_remove(f->R.rdi);
 	}
 	break;
 	case SYS_OPEN:
@@ -104,7 +113,6 @@ void syscall_handler(struct intr_frame *f)
 		void *buffer = f->R.rsi;
 		unsigned size = f->R.rdx;
 		f->R.rax = sys_write(fd, buffer, size);
-		// printf("%d %s %d\n", fd, buffer, size);
 	}
 	break;
 	case SYS_FILESIZE:
@@ -125,6 +133,17 @@ void syscall_handler(struct intr_frame *f)
 	case SYS_EXEC:
 	{
 		sys_exec(f->R.rdi);
+	}
+	break;
+	case SYS_SEEK:
+	{
+		sys_seek(f->R.rdi, f->R.rsi);
+	}
+	break;
+		break;
+	case SYS_TELL:
+	{
+		f->R.rax = sys_tell(f->R.rdi);
 	}
 	break;
 	default:
@@ -164,6 +183,11 @@ bool sys_create(const char *file, unsigned initial_size)
 		return false;
 	}
 	return filesys_create(file, initial_size);
+}
+
+bool sys_remove(const char *file)
+{
+	return filesys_remove(file);
 }
 
 int sys_open(const char *file)
@@ -291,4 +315,14 @@ int sys_exec(const char *cmd_line)
 	{
 		sys_exit(-1);
 	}
+}
+void sys_seek(int fd, unsigned position)
+{
+	struct thread *t = thread_current();
+	file_seek(t->fd_table[fd], position);
+}
+unsigned sys_tell(int fd)
+{
+	struct thread *t = thread_current();
+	return file_tell(t->fd_table[fd]);
 }
