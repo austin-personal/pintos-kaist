@@ -297,17 +297,24 @@ int process_wait(tid_t child_tid UNUSED)
 			struct semaphore sema; // 세마포어안에 넣어야하니까 세마포어 구조체 선언
 			sema_init(&sema, 0);   // 세마포어 초기화
 			cur->wait_sema = &sema;
+
 			struct thread *child_t = thread_get_child(child_tid);
 			if (child_t == NULL)
 			{
 				sema_down(cur->wait_sema);
 			}
+
 			// 무덤에서 찾은 자식은 자식리스트에서 빼줘야 함
 			// 그래야 새 자식을 받을 수 있음
 			cur->child_tid[i] = -1;
 			struct thread *child_t_2 = thread_get_child(child_tid);
 			// printf("my : %d\n", child_t_2->exit_status);
 			return child_t_2->exit_status;
+		}
+		else
+		{
+			// wait-twice 해결!!
+			return -1;
 		}
 	}
 	return -1;
