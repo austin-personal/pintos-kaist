@@ -251,7 +251,7 @@ int sys_read(int fd, void *buffer, unsigned size)
 
 int sys_write(int fd, const void *buffer, unsigned size)
 {
-	// printf("%d %s %d\n", fd, buffer, size);
+
 	check_ptr(buffer);
 	if (!is_user_vaddr(fd) || fd >= 32 || fd <= 0)
 	{
@@ -261,11 +261,11 @@ int sys_write(int fd, const void *buffer, unsigned size)
 	if (fd == 1)
 	{
 		putbuf(buffer, size);
-		// printf("%d %s %d\n", fd, buffer, size);
 		return size;
 	}
 	else
 	{
+
 		return file_write(t->fd_table[fd], buffer, size);
 	}
 }
@@ -299,8 +299,16 @@ pid_t sys_fork(const char *thread_name, struct intr_frame *f)
 
 int sys_wait(pid_t pid)
 {
-
-	return process_wait(pid);
+	struct thread *t = thread_current();
+	for (int i = 0; i < 32; i++)
+	{
+		if (pid != t->child_tid[i])
+		{
+			continue;
+		}
+		return process_wait(pid);
+	}
+	return -1;
 }
 
 int sys_exec(const char *cmd_line)

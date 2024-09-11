@@ -546,6 +546,8 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->fd_table[0] = STDIN_FILENO;
 	t->fd_table[1] = STDOUT_FILENO;
 	t->fd_table[2] = STDERR_FILENO;
+
+	t->child_cnt = 0;
 	/* Add to the all_list. */
 	list_push_back(&all_list, &t->allelem); // all_list에 initial 스레드 추가
 }

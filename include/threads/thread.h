@@ -118,6 +118,7 @@ struct thread
 	struct semaphore *wait_sema;
 	struct thread *parent; // 부모 프로세스 포인터 저장
 	tid_t child_tid[32];   // 자식 tid 저장하는 리스트
+	int child_cnt;		   // 자식 개수
 	///////////////////////////
 	struct file *fd_table[32]; // 파일 디스크립터 생성
 #endif

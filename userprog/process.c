@@ -109,13 +109,17 @@ tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 	parent_args.if_ = if_;
 	/* Clone current thread to new thread.*/
 	child_tid = thread_create(name, PRI_DEFAULT, __do_fork, &parent_args);
-
+	// msg("자식 만듬!! :%d", child_tid);
 	for (int i = 0; i < 32; i++)
 	{
+
 		if (thread_current()->child_tid[i] == -1)
 		{
 
 			thread_current()->child_tid[i] = child_tid;
+			thread_current()->child_cnt += 1;
+			// msg("자식 만듬!! :%d", thread_current()->child_tid[i]);
+			break;
 		}
 	}
 
@@ -287,41 +291,49 @@ int process_wait(tid_t child_tid UNUSED)
 	struct thread *cur = thread_current();
 	// printf("mother name : %s\n", cur->name);
 	// 죽은 자식 스레드를 가져오는 함수
+	// for (int i = 0; i < 32; i++)
+	// {
+	// printf("자식확인1: %d parnetname: %s \n", cur->child_tid[i], cur->name);
+	// }
 
 	//  child_tid 가 자기 자식인 지 확인
 	for (int i = 0; i < 32; i++)
 	{
-		if (child_tid == cur->child_tid[i])
+		// printf("자식확인1:%d ? %d parnetname: %s \n", child_tid, cur->child_tid[i], cur->name);
+		if (child_tid != cur->child_tid[i])
 		{
-			// 맞다면 일로 넘어가겠지
-			struct semaphore sema; // 세마포어안에 넣어야하니까 세마포어 구조체 선언
-			sema_init(&sema, 0);   // 세마포어 초기화
-			cur->wait_sema = &sema;
-
-			struct thread *child_t = thread_get_child(child_tid);
-			if (child_t == NULL)
-			{
-				sema_down(cur->wait_sema);
-			}
-
-			// 무덤에서 찾은 자식은 자식리스트에서 빼줘야 함
-			// 그래야 새 자식을 받을 수 있음
-			cur->child_tid[i] = -1;
-			struct thread *child_t_2 = thread_get_child(child_tid);
-			// printf("my : %d\n", child_t_2->exit_status);
-			return child_t_2->exit_status;
+			continue;
 		}
-		else
+		// 맞다면 일로 넘어가겠지
+		struct semaphore sema; // 세마포어안에 넣어야하니까 세마포어 구조체 선언
+		sema_init(&sema, 0);   // 세마포어 초기화
+		cur->wait_sema = &sema;
+
+		struct thread *child_t = thread_get_child(child_tid);
+		if (child_t == NULL)
 		{
-			// wait-twice 해결!!
-			return -1;
+			sema_down(cur->wait_sema);
 		}
+		// printf("child_tid 가 자기 자식인 지 확인 %d\n", thread_get_child(child_tid)->exit_status);
+		// 무덤에서 찾은 자식은 자식리스트에서 빼줘야 함
+		// 그래야 새 자식을 받을 수 있음
+		// printf("name : %s\n", cur->name);
+		cur->child_tid[i] = -1;
+		struct thread *child_t_2 = thread_get_child(child_tid);
+		// printf("my : %d\n", child_t_2->exit_status);
+		return child_t_2->exit_status;
 	}
 	return -1;
-	// struct thread *child_t_3 = thread_get_child(child_tid);
-	// printf("my : %d\n", child_t_3->exit_status);
-	// return thread_get_child(child_tid)->exit_status;
+	// else
+	// {
+	// 	// wait-twice 해결!!
+	// 	return -1;
+	// }
 }
+
+// struct thread *child_t_3 = thread_get_child(child_tid);
+// printf("my : %d\n", child_t_3->exit_status);
+// return thread_get_child(child_tid)->exit_status;
 
 /* Exit the process. This function is called by thread_exit (). */
 void process_exit(void)
@@ -331,9 +343,21 @@ void process_exit(void)
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
+
 	if (curr->is_user)
 	{
+		// bool is_empty(struct thread * t)
+		// {
+		// 	for (int i = 0; i < 32; i++)
+		// 	{
 
+		// 		if (t->child_tid[i] != NULL)
+		// 		{
+		// 			return false;
+		// 		}
+		// 	}
+		// 	return true;
+		// }
 		printf("%s: exit(%d)\n", curr->name, curr->exit_status);
 		// process_wait///////////
 		// 부모 프로세스에게 신호 보내기
