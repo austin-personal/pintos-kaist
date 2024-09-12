@@ -109,16 +109,19 @@ struct thread
 	int nice;		// advanced scheduler  구현을 위한 nice 변수
 	int recent_cpu; // advanced scheduler  구현을 위한 recent_cpu 변수
 
+	struct list child_list;
+	struct list_elem child_elem;
+	struct semaphore fork_sema; // 할일 끝난 자식
+	struct semaphore wait_sema;
+	struct semaphore exit_sema;
+	struct file *running; // 현재 스레드의 실행중인 파일을 저장
+	int exit_status;	  // 프로세스 종료 상태
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4; /* Page map level 4 */
 	bool is_user;
-	int exit_status; // 프로세스 종료 상태
 	// process_wait/////////////
-	struct semaphore *wait_sema;
 	struct thread *parent; // 부모 프로세스 포인터 저장
-	tid_t child_tid[32];   // 자식 tid 저장하는 리스트
-	int child_cnt;		   // 자식 개수
 	///////////////////////////
 	struct file *fd_table[32]; // 파일 디스크립터 생성
 #endif
@@ -187,6 +190,6 @@ void donate_priority(struct thread *holder, int new_priority);
 void remove_with_lock(struct lock *lock);
 void refresh_priority(void);
 
-struct thread *thread_get_child(tid_t child_tid);
+struct thread *get_child_process(tid_t child_tid);
 
 #endif /* threads/thread.h */

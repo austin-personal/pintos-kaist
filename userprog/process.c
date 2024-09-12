@@ -65,17 +65,6 @@ tid_t process_create_initd(const char *file_name)
 
 		palloc_free_page(fn_copy);
 	}
-	else
-	{
-		for (int i = 0; i < 32; i++)
-		{
-			if (thread_current()->child_tid[i] == -1)
-			{
-				thread_current()->child_tid[i] = tid;
-				break;
-			}
-		}
-	}
 
 	return tid;
 }
@@ -110,23 +99,16 @@ tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 	/* Clone current thread to new thread.*/
 	child_tid = thread_create(name, PRI_DEFAULT, __do_fork, &parent_args);
 	// msg("자식 만듬!! :%d", child_tid);
-	for (int i = 0; i < 32; i++)
+	if (child_tid == TID_ERROR)
 	{
-
-		if (thread_current()->child_tid[i] == -1)
-		{
-
-			thread_current()->child_tid[i] = child_tid;
-			thread_current()->child_cnt += 1;
-			// msg("자식 만듬!! :%d", thread_current()->child_tid[i]);
-			break;
-		}
+		return TID_ERROR;
 	}
+	// 자식이 로드될 때까지 대기하기 위해서 방금 생성한 자식 스레드를 찾는다.
+	struct thread *child = get_child_process(child_tid);
+	// 현재 스레드는 생성만 완료된 상태이다. 생성되어서 ready_list에 들어가고 실행될 때 __do_fork 함수가 실행된다.
+	// __do_fork 함수가 실행되어 로드가 완료될 때까지 부모는 대기한다.
+	sema_down(&child->fork_sema);
 
-	struct semaphore sema; // 세마포어안에 넣어야하니까 세마포어 구조체 선언
-	sema_init(&sema, 0);   // 세마포어 초기화
-	thread_current()->wait_sema = &sema;
-	sema_down(&sema);
 	// 자식 프로세스의 pid를 반환
 	return child_tid;
 }
@@ -211,31 +193,18 @@ __do_fork(void *aux)
 		if (parent->fd_table[i] != NULL)
 		{
 			current->fd_table[i] = file_duplicate(parent->fd_table[i]);
-
-			// if (current->fd_table[i] == -1)
-			// {
-			// 	for (int j = 0; j < i; j++)
-			// 	{
-			// 		if (current->fd_table[j] != -1)
-			// 		{
-			// 			file_close(current->fd_table[j]);
-			// 		}
-			// 	}
-			// 	pml4_destroy(current->pml4);
-			// 	return TID_ERROR;
-			// }
 		}
 	}
 
-	process_init();
 	if_.R.rax = 0;
 	// fork 완료되면 깨우기
-	sema_up(parent->wait_sema);
+	sema_up(&current->fork_sema);
+	process_init();
 	/* Finally, switch to the newly created process. */
 	if (succ)
-
 		do_iret(&if_);
 error:
+	sema_up(&current->fork_sema);
 	thread_exit();
 }
 
@@ -286,49 +255,19 @@ int process_wait(tid_t child_tid UNUSED)
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	// 부모
-	// printf("child_tid :%d\n", child_tid);
-	struct thread *cur = thread_current();
-	// printf("mother name : %s\n", cur->name);
-	// 죽은 자식 스레드를 가져오는 함수
-	// for (int i = 0; i < 32; i++)
-	// {
-	// printf("자식확인1: %d parnetname: %s \n", cur->child_tid[i], cur->name);
-	// }
-
-	//  child_tid 가 자기 자식인 지 확인
-	for (int i = 0; i < 32; i++)
+	struct thread *child = get_child_process(child_tid);
+	if (child == NULL) // 자식이 아니면 -1 을 반환
 	{
-		// printf("자식확인1:%d ? %d parnetname: %s \n", child_tid, cur->child_tid[i], cur->name);
-		if (child_tid != cur->child_tid[i])
-		{
-			continue;
-		}
-		// 맞다면 일로 넘어가겠지
-		struct semaphore sema; // 세마포어안에 넣어야하니까 세마포어 구조체 선언
-		sema_init(&sema, 0);   // 세마포어 초기화
-		cur->wait_sema = &sema;
-
-		struct thread *child_t = thread_get_child(child_tid);
-		if (child_t == NULL)
-		{
-			sema_down(cur->wait_sema);
-		}
-		// printf("child_tid 가 자기 자식인 지 확인 %d\n", thread_get_child(child_tid)->exit_status);
-		// 무덤에서 찾은 자식은 자식리스트에서 빼줘야 함
-		// 그래야 새 자식을 받을 수 있음
-		// printf("name : %s\n", cur->name);
-		cur->child_tid[i] = -1;
-		struct thread *child_t_2 = thread_get_child(child_tid);
-		// printf("my : %d\n", child_t_2->exit_status);
-		return child_t_2->exit_status;
+		return -1;
 	}
-	return -1;
-	// else
-	// {
-	// 	// wait-twice 해결!!
-	// 	return -1;
-	// }
+
+	sema_down(&child->wait_sema);
+
+	list_remove(&child->child_elem);
+
+	sema_up(&child->exit_sema);
+
+	return child->exit_status;
 }
 
 // struct thread *child_t_3 = thread_get_child(child_tid);
@@ -338,47 +277,28 @@ int process_wait(tid_t child_tid UNUSED)
 /* Exit the process. This function is called by thread_exit (). */
 void process_exit(void)
 {
-	struct thread *curr = thread_current();
+	struct thread *cur = thread_current();
 	/* TODO: Your code goes here.
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 
-	if (curr->is_user)
+	if (cur->is_user)
 	{
-		// bool is_empty(struct thread * t)
-		// {
-		// 	for (int i = 0; i < 32; i++)
-		// 	{
-
-		// 		if (t->child_tid[i] != NULL)
-		// 		{
-		// 			return false;
-		// 		}
-		// 	}
-		// 	return true;
-		// }
-		printf("%s: exit(%d)\n", curr->name, curr->exit_status);
-		// process_wait///////////
-		// 부모 프로세스에게 신호 보내기
-		if (curr->parent != NULL)
-		{
-			sema_up(curr->parent->wait_sema);
-		}
-		// chid_tid 리스트 정리
-		// for (int i = 0; i < 32; i++)
-		// {
-
-		// 	if (curr->tid == curr->parent->child_tid[i])
-		// 	{
-		// 		curr->parent->child_tid[i] = -1;
-		// 		break;
-		// 	}
-		// }
-
-		/////////////////////////
+		printf("%s: exit(%d)\n", cur->name, cur->exit_status);
 	}
+
+	for (int i = 3; i < 32; i++)
+	{
+		file_close(cur->fd_table[i]);
+		cur->fd_table[i] = NULL;
+		palloc_free_page(cur->fd_table[i]);
+	}
+	file_close(cur->running); // 현재 실행 중인 파일을 닫는다.
 	process_cleanup();
+
+	sema_up(&cur->wait_sema);
+	sema_down(&cur->exit_sema);
 }
 
 /* Free the current process's resources. */
@@ -592,7 +512,10 @@ load(const char *file_name, struct intr_frame *if_)
 			break;
 		}
 	}
-
+	// 스레드가 삭제될 때 파일을 닫을 수 있게 구조체에 파일을 저장해둔다.
+	t->running = file;
+	// 현재 실행중인 파일은 수정할 수 없게 막는다.
+	file_deny_write(file);
 	/* Set up stack. */
 	if (!setup_stack(if_))
 		goto done;
@@ -653,7 +576,7 @@ load(const char *file_name, struct intr_frame *if_)
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close(file);
+	// file_close(file);
 	return success;
 }
 

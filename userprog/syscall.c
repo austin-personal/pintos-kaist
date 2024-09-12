@@ -132,7 +132,7 @@ void syscall_handler(struct intr_frame *f)
 	break;
 	case SYS_EXEC:
 	{
-		sys_exec(f->R.rdi);
+		f->R.rax = sys_exec(f->R.rdi);
 	}
 	break;
 	case SYS_SEEK:
@@ -154,6 +154,12 @@ void syscall_handler(struct intr_frame *f)
 void check_ptr(const void *ptr)
 {
 	struct thread *cur = thread_current();
+	// multi-oom
+	if (ptr > USER_STACK)
+	{
+		sys_exit(-1);
+	}
+
 	if (pml4_get_page(cur->pml4, ptr) == NULL)
 	{
 		sys_exit(-1);
@@ -280,18 +286,13 @@ pid_t sys_fork(const char *thread_name, struct intr_frame *f)
 {
 
 	pid_t pid;
-	char *fn_copy;
-	fn_copy = palloc_get_page(0);
-	if (fn_copy == NULL)
-		return TID_ERROR;
-	strlcpy(fn_copy, thread_name, PGSIZE);
-	pid = process_fork(fn_copy, f);
+	pid = process_fork(thread_name, f);
 	// 복제된 프로세스도 자식으로 넣음
 
 	// printf("fork pid :%d\n", pid);
 	if (pid == TID_ERROR)
 	{
-		palloc_free_page(fn_copy);
+		return TID_ERROR;
 	}
 
 	return pid;
@@ -299,16 +300,8 @@ pid_t sys_fork(const char *thread_name, struct intr_frame *f)
 
 int sys_wait(pid_t pid)
 {
-	struct thread *t = thread_current();
-	for (int i = 0; i < 32; i++)
-	{
-		if (pid != t->child_tid[i])
-		{
-			continue;
-		}
-		return process_wait(pid);
-	}
-	return -1;
+
+	return process_wait(pid);
 }
 
 int sys_exec(const char *cmd_line)
@@ -317,8 +310,14 @@ int sys_exec(const char *cmd_line)
 	char *cl_copy;
 	cl_copy = palloc_get_page(0);
 	if (cl_copy == NULL)
-		return TID_ERROR;
-	strlcpy(cl_copy, cmd_line, PGSIZE);
+	{
+		sys_exit(-1);
+	}
+	if (strlcpy(cl_copy, cmd_line, PGSIZE) >= PGSIZE)
+	{
+		palloc_free_page(cl_copy);
+		return -1;
+	}
 	if (process_exec(cl_copy) < 0)
 	{
 		sys_exit(-1);
