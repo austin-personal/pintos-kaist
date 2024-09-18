@@ -93,6 +93,12 @@ struct thread {
 	int priority;                       /* Priority. */
 	int64_t wakeup_tick; // (P1): sleeping thread가 일어날 시간
 
+	//(P1:donation)
+	int org_priority;
+	struct lock* wait_on_lock;
+	struct list_elem donation_elem;         
+	struct list donations;
+
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 

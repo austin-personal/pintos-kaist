@@ -333,11 +333,12 @@ thread_yield (void) {
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
-void
-thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
-	preempt();
-	
+
+void thread_set_priority(int new_priority)
+{
+    thread_current()->org_priority = new_priority;
+    update_priority();
+    preempt();
 }
 
 /* Returns the current thread's priority. */
@@ -436,6 +437,10 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC; // 무결성 검사 이숫자를 넣어줌으로써 통과 된 쓰레드다
+	//(P1:P-Donation) 
+	t->org_priority = priority; // (P1:P-Donation)
+	t->wait_on_lock = NULL; // (P1:P-Donation)
+	list_init(&(t->donations));
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
