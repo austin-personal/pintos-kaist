@@ -70,7 +70,7 @@ static bool priority_compare(const struct list_elem *a, const struct list_elem *
 // (P1: Alram clock): thread 재우고 깨우고
 static bool compare_thread(const struct list_elem *a, const struct list_elem *b, void *aux);
 void thread_sleep(int64_t ticks);
-void thread_awake(void);
+void thread_awake(int64_t current_ticks);
 
 // (P1:Priority)
 void preempt(void);
@@ -654,8 +654,7 @@ void thread_sleep(int64_t ticks) {
 }
 
 // (P1): 잠자는 함수 깨우기
-void thread_awake(void) {
-    int64_t current_ticks = timer_ticks();
+void thread_awake(int64_t current_ticks) {
     struct list_elem *e = list_begin(&sleep_list);
 
     while (e != list_end(&sleep_list)) {
