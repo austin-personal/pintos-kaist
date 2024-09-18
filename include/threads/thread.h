@@ -143,6 +143,10 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
+bool priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux );
+bool ticks_compare(const struct list_elem *a, const struct list_elem *b, void *aux);
+bool sema_compare(const struct list_elem *a, const struct list_elem *b, void *aux );
 
 
+void preempt(void);
 #endif /* threads/thread.h */

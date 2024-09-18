@@ -68,9 +68,10 @@ sema_down (struct semaphore *sema) {
 	ASSERT (!intr_context ());
 
 	old_level = intr_disable ();
+
 	// 공유자원이 0이면 쓰레드를 맨뒤로
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		list_insert_ordered(&sema->waiters, &thread_current()->elem, priority_compare, NULL);
 		thread_block (); //현재 쓰레드 제우기
 	}
 	sema->value--; // sema-> value가 0이 아닐때
@@ -106,17 +107,19 @@ sema_try_down (struct semaphore *sema) {
    and wakes up one thread of those waiting for SEMA, if any.
 
    This function may be called from an interrupt handler. */
-void
-sema_up (struct semaphore *sema) {
+
+void sema_up (struct semaphore *sema) {
 	enum intr_level old_level;
 
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
-	if (!list_empty (&sema->waiters))
-		thread_unblock (list_entry (list_pop_front (&sema->waiters),
-					struct thread, elem));
+	if (!list_empty (&sema->waiters)){
+    	list_sort(&sema->waiters,priority_compare,NULL);
+		thread_unblock (list_entry (list_pop_front (&sema->waiters),struct thread, elem));
+	}
 	sema->value++;
+    preempt();
 	intr_set_level (old_level);
 }
 
@@ -305,10 +308,11 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
-
-	if (!list_empty (&cond->waiters))
+	if (!list_empty (&cond->waiters)){
+      list_sort(&cond->waiters, sema_compare, NULL);
 		sema_up (&list_entry (list_pop_front (&cond->waiters),
 					struct semaphore_elem, elem)->semaphore);
+   }
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -324,4 +328,20 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 
 	while (!list_empty (&cond->waiters))
 		cond_signal (cond, lock);
+}
+//(P1:Sema)
+bool sema_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) 
+{
+	struct semaphore_elem *sa = list_entry(a, struct semaphore_elem, elem);
+    struct semaphore_elem *sb = list_entry(b, struct semaphore_elem, elem);
+
+	struct list *sal = &(sa->semaphore.waiters);
+	struct list *sbl = &(sb->semaphore.waiters);
+
+	struct list_elem * head_a = list_begin(sal);
+	struct list_elem * head_b = list_begin(sbl);
+	
+	struct thread *ta = list_entry(head_a, struct thread, elem);
+    struct thread *tb = list_entry(head_b, struct thread, elem);
+    return ta->priority > tb->priority;
 }

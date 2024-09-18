@@ -6,6 +6,7 @@
         "timer.h": "c",
         "interrupt.h": "c",
         "intr-stubs.h": "c",
-        "tests.h": "c"
+        "tests.h": "c",
+        "palloc.h": "c"
     }
 }

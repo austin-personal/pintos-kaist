@@ -11,6 +11,8 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+//(P1:convar)
+#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -64,16 +66,13 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
-static bool priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 
 // (P1: Alram clock): thread 재우고 깨우고
-static bool compare_thread(const struct list_elem *a, const struct list_elem *b, void *aux);
 void thread_sleep(int64_t ticks);
 void thread_awake(int64_t current_ticks);
 
-// (P1:Priority)
-void preempt(void);
+
 
 
 /* Returns true if T appears to point to a valid thread. */
@@ -220,6 +219,7 @@ tid_t thread_create (const char *name, int priority, thread_func *function, void
 
 	/* Add to run queue. */
 	thread_unblock (t);
+	preempt();
 
 	return tid;
 }
@@ -258,7 +258,6 @@ thread_unblock (struct thread *t) {
 	//list_push_back (&ready_list, &t->elem);
 	list_insert_ordered(&ready_list, &t->elem, priority_compare, NULL);
 	t->status = THREAD_READY;
-	preempt();
 	intr_set_level (old_level);
 }
 
@@ -622,13 +621,13 @@ allocate_tid (void) {
 }
 
 // (P1): 제울 쓰레드와 현재 sleep_list 의 ticks들 하나하나 비교 하는 함수
-static bool ticks_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+bool ticks_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
     struct thread *sa = list_entry(a, struct thread, elem);
     struct thread *sb = list_entry(b, struct thread, elem);
     return sa->wakeup_tick < sb->wakeup_tick;
 }
 // (P1): 제울 쓰레드와 현재 sleep_list 의 priority들 하나하나 비교 하는 함수
-static bool
+bool
 priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) 
 {
     struct thread *ta = list_entry(a, struct thread, elem);
@@ -673,16 +672,22 @@ void thread_awake(int64_t current_ticks) {
 void preempt(void) {
 	struct thread *cur = thread_current(); // 현재 쓰레드
 
-	struct thread *t = list_entry(list_begin(&ready_list), struct thread, elem);// ready_list에 가장 높은 우선순위
-
 	if (list_empty(&ready_list)){
 		return;
 	}
-	if (cur == idle_thread){
-		return;
-	}
 
-	if (cur->priority < t->priority){
-		thread_yield();
-	}
+	struct thread *next = list_entry(list_begin(&ready_list), struct thread, elem);
+
+    // If the unblocked thread has a higher priority, force a yield immediately
+    if (cur != idle_thread && cur->priority < next->priority) {
+		if (intr_context()){
+			// 인터럽트 컨텍스트에서 호출된 경우: 인터럽트 종료 후 스케줄링
+			intr_yield_on_return();
+		}
+		else{
+			// 일반 컨텍스트에서 호출된 경우: 즉시 스레드 양보
+			thread_yield();
+		}
+    }
 }
+
