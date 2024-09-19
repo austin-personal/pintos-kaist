@@ -104,11 +104,6 @@ struct thread {
 	struct list_elem donation_elem;         
 	struct list donations;
 
-	//(P1:mlfqs)
-	int recent_cpu;
-	int nice;
-	struct list_elem allelem;
-
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 
