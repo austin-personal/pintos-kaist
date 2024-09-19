@@ -195,12 +195,17 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 	//(P1:P-Donation) 
-    struct thread *cur = thread_current();
-    if (lock->holder != NULL){ // 현재 lock이 점유중일때는 
-       cur->wait_on_lock = lock; // 현재 스레드(기다려야 하는)의 wait_on_lock으로 지정
-       list_push_back(&lock->holder->donations, &cur->donation_elem);
-       donate_priority();
-    }
+	struct thread *cur = thread_current();
+	if (!thread_mlfqs){
+		
+		if (lock->holder != NULL){ // 현재 lock이 점유중일때는 
+			cur->wait_on_lock = lock; // 현재 스레드(기다려야 하는)의 wait_on_lock으로 지정
+			list_push_back(&lock->holder->donations, &cur->donation_elem);
+			donate_priority();
+    	}
+		
+	}
+    
 
 	sema_down (&lock->semaphore);
 	//(P1:P-Donation) 
@@ -238,9 +243,12 @@ lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
 
-	//(P1:P-Donation)
-	remove_donor(lock);
-    update_priority();
+   /*thread_mlfqs가 False일때만 실행*/
+    if (!thread_mlfqs)
+    {
+       remove_donor(lock);
+       update_priority();
+    }
 
 
 	lock->holder = NULL;
