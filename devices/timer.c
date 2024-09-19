@@ -128,7 +128,20 @@ timer_print_stats (void) {
 static void timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
-	thread_awake(ticks);
+	if (thread_mlfqs) {
+		mlfqs_increment_recent_cpu();  // Increment recent_cpu for the current thread
+
+		if (ticks % TIMER_FREQ == 0) {  // Every second
+			mlfqs_calculate_load_avg();  // Recalculate system load average
+			mlfqs_recalculate_recent_cpu();  // Recalculate recent_cpu for all threads
+		}
+
+		if (ticks % 4 == 0) {  // Every 4 ticks, recalculate priorities
+			mlfqs_recalculate_priority();  // Recalculate priorities of all threads
+		}
+	}
+
+	thread_awake(ticks);  // Wake up sleeping threads
 }
 
 // 루프의 반복 횟수(loops)가 타이머 틱(tick) 하나를 초과하여 기다리게 하는지 여부를 확인
