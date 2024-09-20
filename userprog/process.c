@@ -50,6 +50,10 @@ process_create_initd (const char *file_name) {
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
 
+	// (P2: args) Paring only program_name from file_name
+	char *save_ptr;
+    strtok_r(file_name, " ", &save_ptr);
+
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
@@ -173,11 +177,27 @@ process_exec (void *f_name) {
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
+	//// (P2:args) Parsing all arguments and save it into a list.
+    char *parse[64];
+    char *token, *save_ptr;
+    int count = 0;
+    for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr))
+        parse[count++] = token;
+
 	/* We first kill the current context */
 	process_cleanup ();
 
 	/* And then load the binary */
 	success = load (file_name, &_if);
+
+	//// (P2:args) Passing
+    argument_stack(parse, count, &_if.rsp); // 함수 내부에서 parse와 rsp의 값을 직접 변경하기 위해 주소 전달
+    _if.R.rdi = count; // 인터럽트 프레임의 RDI 레지스터 필드에 저장
+    _if.R.rsi = (char *)_if.rsp + 8; // 인터럽트 프레임의 RSI 레지스터 필드에 저장
+
+	//// (P2:args) Check user stack
+	hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)_if.rsp, true);
+
 
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
@@ -201,9 +221,9 @@ process_exec (void *f_name) {
  * does nothing. */
 int
 process_wait (tid_t child_tid UNUSED) {
-	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
-	 * XXX:       to add infinite loop here before
-	 * XXX:       implementing the process_wait. */
+	for (int i = 0; i < 100000000; i++){
+		
+	}
 	return -1;
 }
 
@@ -550,6 +570,47 @@ setup_stack (struct intr_frame *if_) {
 	}
 	return success;
 }
+
+
+//// (P2:args) 받은 인자들을 스택에 넣어주기
+// parse = 인자들을 받은 배열, count = 인자의 수, rsp = 스택 포인터
+void argument_stack(char **parse, int count, void **rsp)
+{
+    // 모든 인자 문자열 push
+    for (int i = count - 1; i > -1; i--) // 역순으로 푸쉬
+    {
+        for (int j = strlen(parse[i]); j > -1; j--) //각 문자열을 끝에서부터 한 문자씩 푸시
+        {
+            (*rsp)--;                      // 스택 주소 감소
+            **(char **)rsp = parse[i][j]; // 주소에 문자 저장
+        }
+        parse[i] = *(char **)rsp; //각 인자의 시작 주소를 parse[i]에 저장
+    }
+
+    // 정렬 패딩 push
+    int padding = (int)*rsp % 8;
+    for (int i = 0; i < padding; i++)
+    {
+        (*rsp)--;
+        **(uint8_t **)rsp = 0; // rsp 직전까지 값 채움
+    }
+
+    // 인자 문자열 종료 표시인 NULL push
+    (*rsp) -= 8;
+    **(char ***)rsp = 0; // char* 타입의 0 추가
+
+    // 각 인자 주소 push
+    for (int i = count - 1; i > -1; i--) //각 인자 문자열의 주소를 역순으로 푸시
+    {
+        (*rsp) -= 8; // 다음 주소로 이동
+        **(char ***)rsp = parse[i]; // char* 타입의 주소 추가
+    }
+
+    // return address push
+    (*rsp) -= 8;
+    **(void ***)rsp = 0; // void* 타입의 0 추가
+}
+
 
 /* Adds a mapping from user virtual address UPAGE to kernel
  * virtual address KPAGE to the page table.
