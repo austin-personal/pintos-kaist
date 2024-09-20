@@ -83,31 +83,32 @@ initd(void *f_name)
 		PANIC("Fail to launch initd\n");
 	NOT_REACHED();
 }
-struct parent_tif
-{
-	struct thread *t;
-	struct intr_frame *if_;
-};
+
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
 tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 {
 	tid_t child_tid;
-	struct parent_tif parent_args;
-	parent_args.t = thread_current();
-	parent_args.if_ = if_;
+	memcpy(&thread_current()->parent_if, if_, sizeof(struct intr_frame));
 	/* Clone current thread to new thread.*/
-	child_tid = thread_create(name, PRI_DEFAULT, __do_fork, &parent_args);
+	child_tid = thread_create(name, PRI_DEFAULT, __do_fork, thread_current());
 	// msg("자식 만듬!! :%d", child_tid);
-	if (child_tid == TID_ERROR)
-	{
-		return TID_ERROR;
-	}
+
 	// 자식이 로드될 때까지 대기하기 위해서 방금 생성한 자식 스레드를 찾는다.
 	struct thread *child = get_child_process(child_tid);
+
+	// printf("exit_status : %d\n", child->exit_status);
+	// printf("exit_tid : %d\n", child->tid);
 	// 현재 스레드는 생성만 완료된 상태이다. 생성되어서 ready_list에 들어가고 실행될 때 __do_fork 함수가 실행된다.
 	// __do_fork 함수가 실행되어 로드가 완료될 때까지 부모는 대기한다.
 	sema_down(&child->fork_sema);
+	// fork가 실패했을때 반환 tid 처리
+	if (child->exit_status == -1)
+	{
+		list_remove(&child->child_elem);
+		sema_up(&child->exit_sema);
+		return TID_ERROR;
+	}
 
 	// 자식 프로세스의 pid를 반환
 	return child_tid;
@@ -160,15 +161,15 @@ static void
 __do_fork(void *aux)
 {
 	struct intr_frame if_;
-	struct parent_tif *parent_args = (struct parent_tif *)aux;
+
 	struct thread *current = thread_current();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-	struct thread *parent = parent_args->t;
-	struct intr_frame *parent_if = parent_args->if_;
+	struct thread *parent = (struct thread *)aux;
+	struct intr_frame *parent_if = &parent->parent_if;
 	bool succ = true;
 	/* 1. Read the cpu context to local stack. */
 	memcpy(&if_, parent_if, sizeof(struct intr_frame));
-
+	if_.R.rax = 0;
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
 	if (current->pml4 == NULL)
@@ -195,8 +196,8 @@ __do_fork(void *aux)
 			current->fd_table[i] = file_duplicate(parent->fd_table[i]);
 		}
 	}
+	// printf("exit_status in fork : %d\n", current->exit_status);
 
-	if_.R.rax = 0;
 	// fork 완료되면 깨우기
 	sema_up(&current->fork_sema);
 	process_init();
@@ -204,6 +205,8 @@ __do_fork(void *aux)
 	if (succ)
 		do_iret(&if_);
 error:
+	// fork 실패했을 때 -1 처리
+	current->exit_status = -1;
 	sema_up(&current->fork_sema);
 	thread_exit();
 }
@@ -260,14 +263,15 @@ int process_wait(tid_t child_tid UNUSED)
 	{
 		return -1;
 	}
-
+	// printf("exit_status in wait1 : %d\n", child->exit_status);
 	sema_down(&child->wait_sema);
 
 	list_remove(&child->child_elem);
-
+	tid_t a = child->exit_status;
+	// printf("exit_status in wait2 : %d\n", child->exit_status);
 	sema_up(&child->exit_sema);
-
-	return child->exit_status;
+	// printf("exit_status in wait3 : %d\n", child->exit_status);
+	return a;
 }
 
 // struct thread *child_t_3 = thread_get_child(child_tid);
@@ -287,18 +291,18 @@ void process_exit(void)
 	{
 		printf("%s: exit(%d)\n", cur->name, cur->exit_status);
 	}
-
 	for (int i = 3; i < 32; i++)
 	{
 		file_close(cur->fd_table[i]);
 		cur->fd_table[i] = NULL;
-		palloc_free_page(cur->fd_table[i]);
 	}
 	file_close(cur->running); // 현재 실행 중인 파일을 닫는다.
 	process_cleanup();
-
+	// printf("exit_status in exit1 : %d\n", cur->exit_status);
 	sema_up(&cur->wait_sema);
+	// printf("exit_status : %d\n", cur->exit_status);
 	sema_down(&cur->exit_sema);
+	// printf("exit_status in exit2 : %d\n", cur->exit_status);
 }
 
 /* Free the current process's resources. */
@@ -533,7 +537,6 @@ load(const char *file_name, struct intr_frame *if_)
 		esp -= strlen(argv[i]) + 1;
 		memcpy(esp, argv[i], strlen(argv[i]) + 1); // 인자 값을 스택에 복사
 		argv_addresses[i] = esp;
-		// printf("인자 값 스택에 잘 복사되었음: %s\n", (char *)esp);
 	}
 	// // 2. 8의 배수 바이트 수로 맞춰주기 위해 패딩값을 넣는다.
 	while (esp % 8 != 0)
@@ -541,37 +544,27 @@ load(const char *file_name, struct intr_frame *if_)
 		esp--;
 		// 1바이트 짜리 포인터로 형변환
 		*(uint8_t *)esp = 0;
-		// printf("패딩 값 스택에 잘 복사되었음: %d\n", *(uint8_t *)esp);
 	}
 	// 3. NULL포인터 추가
 	esp -= sizeof(char *);
 	*(char **)esp = 0;
 	// 위와 결과가 같음
 	// *esp = 0;
-	// printf("argv[%d] NULL 값 스택에 잘 복사되었음: %d\n", argc, *(char *)esp);
 	// 4.rsp값을 낮춰가며 stack에 프로그램 이름 주소와 인자 주소를 넣어준다.
 	for (int i = argc - 1; i >= 0; i--)
 	{
 		esp -= sizeof(char *);
-
 		memcpy(esp, &argv_addresses[i], sizeof(char *)); // 인자 값을 스택에 복사
-														 // printf("인자 주소 스택에 잘 복사되었음: %p\n", *(char **)esp);
-														 // printf("인자 주소에 있는 값: %s\n", *(char **)esp);
 	}
 	/* 4-1. argv의 시작 주소 저장 */
 	uintptr_t start_argv = esp;
 	// 5.return address 값 stack에 넣기
 	esp -= sizeof(void *);
 	*(void **)esp = 0;
-	// printf("가짜 return address 값 스택에 잘 복사되었음: %d\n", *(void **)esp);
 	//%rsi 가 argv 주소(argv[0]의 주소)를 가리키게 하고, %rdi 를 argc 로 설정
 	if_->rsp = esp;
-	// printf("RSP: %p\n", (void *)if_->rsp);
 	if_->R.rdi = argc;
 	if_->R.rsi = start_argv;
-	// printf("RDI: %d\n", if_->R.rdi);
-	// printf("RSI: %p\n", (void *)if_->R.rsi);
-
 	success = true;
 
 done:

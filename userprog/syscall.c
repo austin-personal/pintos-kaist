@@ -1,4 +1,5 @@
 #include "userprog/syscall.h"
+#include <string.h>
 #include <stdio.h>
 #include <syscall-nr.h>
 #include <user/syscall.h>
@@ -132,7 +133,11 @@ void syscall_handler(struct intr_frame *f)
 	break;
 	case SYS_EXEC:
 	{
-		f->R.rax = sys_exec(f->R.rdi);
+
+		if (sys_exec(f->R.rdi) == -1)
+		{
+			sys_exit(-1);
+		}
 	}
 	break;
 	case SYS_SEEK:
@@ -307,21 +312,19 @@ int sys_wait(pid_t pid)
 int sys_exec(const char *cmd_line)
 {
 	check_ptr(cmd_line);
-	char *cl_copy;
-	cl_copy = palloc_get_page(0);
+	int file_size = strlen(cmd_line) + 1;
+	char *cl_copy = palloc_get_page(PAL_ZERO);
 	if (cl_copy == NULL)
 	{
 		sys_exit(-1);
 	}
-	if (strlcpy(cl_copy, cmd_line, PGSIZE) >= PGSIZE)
+	strlcpy(cl_copy, cmd_line, file_size);
+
+	if (process_exec(cl_copy) == -1)
 	{
-		palloc_free_page(cl_copy);
 		return -1;
 	}
-	if (process_exec(cl_copy) < 0)
-	{
-		sys_exit(-1);
-	}
+	return 0;
 }
 void sys_seek(int fd, unsigned position)
 {

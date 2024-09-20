@@ -116,6 +116,9 @@ struct thread
 	struct semaphore exit_sema;
 	struct file *running; // 현재 스레드의 실행중인 파일을 저장
 	int exit_status;	  // 프로세스 종료 상태
+
+	struct intr_frame parent_if;
+	// int child_exit_status[32]; // 죽은 자식 상태 저장
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4; /* Page map level 4 */
