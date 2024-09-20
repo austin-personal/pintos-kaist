@@ -196,7 +196,7 @@ process_exec (void *f_name) {
     _if.R.rsi = (char *)_if.rsp + 8; // 인터럽트 프레임의 RSI 레지스터 필드에 저장
 
 	//// (P2:args) Check user stack
-	hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)_if.rsp, true);
+	// hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)_if.rsp, true);
 
 
 	/* If load failed, quit. */
@@ -221,8 +221,8 @@ process_exec (void *f_name) {
  * does nothing. */
 int
 process_wait (tid_t child_tid UNUSED) {
-	for (int i = 0; i < 100000000; i++){
-		
+	for (int i = 0; i < 1<<29; i++){
+
 	}
 	return -1;
 }
@@ -230,13 +230,28 @@ process_wait (tid_t child_tid UNUSED) {
 /* Exit the process. This function is called by thread_exit (). */
 void
 process_exit (void) {
-	struct thread *curr = thread_current ();
 	/* TODO: Your code goes here.
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
+	struct thread *curr = thread_current ();
+	if (curr->is_user)	
+	{
+		printf("%s: exit(%d)\n", curr->name, curr->exit_status);
+	}
 
-	process_cleanup ();
+	for (int i = 3; i < 32; i++)
+	{
+		file_close(curr->fd_table[i]);
+		curr->fd_table[i] = NULL;
+		palloc_free_page(curr->fd_table[i]);
+	}
+	file_close(curr->running); // 현재 실행 중인 파일을 닫는다.
+	process_cleanup();
+
+	// sema_up(&curr->wait_sema);
+	// sema_down(&curr->exit_sema);
+	// process_cleanup ();
 }
 
 /* Free the current process's resources. */

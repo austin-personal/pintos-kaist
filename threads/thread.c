@@ -492,6 +492,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 		t->nice = NICE_DEFAULT;
 		list_push_back(&all_list, &t->allelem); // all_list에 initial 스레드 추가
 	}
+
+	//(P2:syscall)
+	t->is_user = false;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

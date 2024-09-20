@@ -111,10 +111,17 @@ struct thread {
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+	// (P2:syscall)
+	bool is_user;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
+	// (P2:syscall)
 	uint64_t *pml4;                     /* Page map level 4 */
+	struct file *fd_table[32]; // 파일 디스크립터 생성
+	int exit_status; // 프로세스 종료 상태
+	struct file *running; // 현재 스레드의 실행중인 파일을 저장
+
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
