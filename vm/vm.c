@@ -135,10 +135,11 @@ vm_evict_frame(void)
 static struct frame *
 vm_get_frame(void)
 {
+	// 슬아 추가
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
 	ASSERT(frame != NULL);
-	frame->page = palloc_get_page(PAL_USER);
+	frame->kva = palloc_get_page(PAL_USER);
 	ASSERT(frame->page == NULL);
 	PANIC("todo");
 	return frame;
@@ -181,7 +182,10 @@ bool vm_claim_page(void *va UNUSED)
 {
 	struct page *page = NULL;
 	/* TODO: Fill this function */
+	page = spt_find_page(thread_current()->spt, va);
+	// if(page==NULL){
 
+	// }
 	return vm_do_claim_page(page);
 }
 
@@ -196,7 +200,10 @@ vm_do_claim_page(struct page *page)
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
-
+	if (!spt_insert_page(thread_current()->spt, page))
+	{
+		return false;
+	};
 	return swap_in(page, frame->kva);
 }
 
