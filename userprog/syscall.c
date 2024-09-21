@@ -45,8 +45,11 @@ int sys_read(int fd, void *buffer, unsigned size);
 void sys_seek (int fd, unsigned position);
 int sys_filesize(int fd);
 unsigned sys_tell(int fd);
+bool sys_remove(const char *file);
 
-
+int wait (pid_t pid);
+pid_t fork (const char *thread_name);
+int exec (const char *cmd_line);
 
 void
 syscall_init (void) {
@@ -80,20 +83,18 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	// 	// f->R.rax = fork(f->R.rdi, f);
 	// 	break;
 	// case SYS_EXEC:
-	
 	// 	// if (exec(f->R.rdi) == -1)
 	// 	// 	exit(-1);
 	// 	break;
 	// case SYS_WAIT:
-	
 	// 	// f->R.rax = process_wait(f->R.rdi);
 	// 	break;
 	case SYS_CREATE:
 		f->R.rax = sys_create(f->R.rdi, f->R.rsi);
 		break;
-	// case SYS_REMOVE:
-	// 	f->R.rax = remove(f->R.rdi);
-	// 	break;
+	case SYS_REMOVE:
+		f->R.rax = sys_remove(f->R.rdi);
+		break;
 	case SYS_OPEN:
 		f->R.rax = sys_open(f->R.rdi);
 		break;
@@ -133,8 +134,8 @@ void check_ptr(const void *ptr)
 
 	if (pml4_get_page(cur->pml4, ptr) == NULL || ptr == NULL ) sys_exit(-1);
 }
-
-bool check_file_open(int fd)
+// (P2:syscall) Check whether it is correct fd
+bool check_fd(int fd)
 {
 	if (0 <= fd && fd < 32)
 	{
@@ -180,11 +181,7 @@ int sys_write(int fd, const void *buffer, unsigned size)
 		return size;
 		
 	}
-	// else if (fd == 0)
-	// {
-	// 	return -1;
-	// }
-	else if (check_file_open(fd))
+	else if (check_fd(fd))
 	{
 		
 		return file_write(t->fd_table[fd], buffer, size); // Writes size bytes from buffer to the open file fd
@@ -215,7 +212,6 @@ int sys_open(const char *file)
 	
 	if (f == NULL)
 	{
-		
 		return -1;
 	}
 	else
@@ -227,11 +223,8 @@ int sys_open(const char *file)
 		{
 			if (t->fd_table[fd] == NULL)
 			{
-
 				t->fd_table[fd] = f;
-				
 				return fd;
-				
 			}
 		}
 		
@@ -243,8 +236,7 @@ int sys_open(const char *file)
 // (P2:syscall) Closes file descriptor fd. Exiting or terminating a process.
 void sys_close(int fd)
 {
-	
-	if (!check_file_open || !check_ptr) return;
+	if (!check_fd(fd)) sys_exit(-1);
 
 	if (thread_current()->fd_table[fd] != NULL)
 	{
@@ -261,8 +253,13 @@ void sys_close(int fd)
 int sys_read(int fd, void *buffer, unsigned size)
 {
 	check_ptr(buffer);
-	if (check_file_open(fd))
+
+	if (check_fd(fd))
 	{
+		if (fd == 1)
+		{
+			sys_exit(-1);
+		}
 		struct file *target = thread_current()->fd_table[fd];
 		off_t bytes_read = file_read(target, buffer, size);
 		return bytes_read;
@@ -276,7 +273,7 @@ int sys_read(int fd, void *buffer, unsigned size)
 // (P2:syscall) Changes the next byte to be read or written in open file fd to position
 void sys_seek (int fd, unsigned position)
 {
-	if (check_file_open)
+	if (check_fd)
 	{
 		file_seek(thread_current()->fd_table[fd], position);
 	}
@@ -295,3 +292,8 @@ unsigned sys_tell(int fd)
 	return file_tell(t->fd_table[fd]);
 }
 
+
+bool sys_remove(const char *file)
+{
+	return filesys_remove(file);
+}
