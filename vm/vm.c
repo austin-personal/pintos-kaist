@@ -51,13 +51,48 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 	struct supplemental_page_table *spt = &thread_current()->spt;
 
 	/* Check wheter the upage is already occupied or not. */
+	// 현재 쓰레드 페이지 테이블에서 upage와 같은 가상주소를 가진 페이지를 못 찾았을 때
 	if (spt_find_page(spt, upage) == NULL)
 	{
 		/* TODO: Create the page, fetch the initialier according to the VM type,
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
 		/* TODO: Insert the page into the spt. */
+		/* TODO: 페이지를 생성하고, VM 타입에 따라 초기화 함수를 가져옵니다.
+		 * TODO: 그런 다음, uninit_new를 호출하여 "uninit" 페이지 구조체를 생성합니다.
+		 * TODO: uninit_new를 호출한 후에 필드를 수정해야 합니다. */
+
+		/* TODO: 페이지를 spt에 삽입합니다. */
+		struct page *new_page;
+		switch (VM_TYPE(type))
+		{
+		case VM_ANON:
+		{
+			init = anon_initializer;
+		}
+		break;
+		case VM_FILE:
+		{
+			init = file_backed_initializer;
+		}
+		break;
+		default:
+			return false;
+		}
+		new_page = malloc(sizeof(struct page));
+		if (new_page == NULL)
+			goto err;
+
+		uninit_new(new_page, upage, init, type, aux, init);
+
+		if (!spt_insert_page(spt, new_page))
+		{
+
+			free(new_page);
+			goto err;
+		}
 	}
+
 err:
 	return false;
 }
@@ -70,7 +105,7 @@ spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 	/* TODO: Fill this function. */
 	struct hash_iterator i;
 
-	hash_first(&i, spt->vm);
+	hash_first(&i, &spt->vm);
 	while (hash_next(&i))
 	{
 		page = hash_entry(hash_cur(&i), struct page, hash_elem);
@@ -165,7 +200,11 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
-
+	page = spt_find_page(spt, addr);
+	if (page == NULL)
+	{
+		return false;
+	}
 	return vm_do_claim_page(page);
 }
 
@@ -182,11 +221,12 @@ bool vm_claim_page(void *va UNUSED)
 {
 	struct page *page = NULL;
 	/* TODO: Fill this function */
-	page = spt_find_page(thread_current()->spt, va);
-	// if(page==NULL){
-
-	// }
-	return vm_do_claim_page(page);
+	page = spt_find_page(&thread_current()->spt, va);
+	if (page == NULL || !vm_do_claim_page(page))
+	{
+		return false;
+	}
+	return true;
 }
 
 /* Claim the PAGE and set up the mmu. */
@@ -200,7 +240,7 @@ vm_do_claim_page(struct page *page)
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
-	if (!spt_insert_page(thread_current()->spt, page))
+	if (!spt_insert_page(&thread_current()->spt, page))
 	{
 		return false;
 	};
@@ -211,7 +251,7 @@ vm_do_claim_page(struct page *page)
 void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 {
 
-	hash_init(&spt->vm, page_hash_func, page_less_func NULL);
+	hash_init(&spt->vm, page_hash_func, page_less_func, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
@@ -225,4 +265,10 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+}
+
+// 비트플래그를 사용하여 스택페이지인지 표시함.
+bool is_stack_page(struct page *page)
+{
+	return VM_TYPE(page->operations->type) & VM_STACK;
 }

@@ -18,8 +18,8 @@ enum vm_type
 
 	/* Auxillary bit flag marker for store information. You can add more
 	 * markers, until the value is fit in the int. */
-	VM_MARKER_0 = (1 << 3),
-	VM_MARKER_1 = (1 << 4),
+	VM_STACK = (1 << 3),
+	VM_WRITABLE = (1 << 4),
 
 	/* DO NOT EXCEED THIS VALUE. */
 	VM_MARKER_END = (1 << 31),
@@ -119,5 +119,16 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 void vm_dealloc_page(struct page *page);
 bool vm_claim_page(void *va);
 enum vm_type page_get_type(struct page *page);
+
+bool is_stack_page(struct page *page);
+// load_segment함수에서 바이너리 파일을 로드할 때 필수적인 정보를 포함하는 구조체 정의
+struct load_info
+{
+	struct file *file; // 파일 포인터
+	off_t offset;	   // 파일에서 읽기 시작할 오프셋
+	size_t read_bytes; // 파일에서 읽을 바이트 수
+	size_t zero_bytes; // 0으로 채울 바이트 수
+	bool writable;	   // 페이지가 쓰기 가능한지 여부
+};
 
 #endif /* VM_VM_H */
