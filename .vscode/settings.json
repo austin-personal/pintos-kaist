@@ -17,6 +17,12 @@
         "filesys.h": "c",
         "timer.h": "c",
         "palloc.h": "c",
-        "intrinsic.h": "c"
+        "intrinsic.h": "c",
+        "mmu.h": "c",
+        "init.h": "c",
+        "debug.h": "c",
+        "fixed_point.h": "c",
+        "stdint.h": "c",
+        "hash.h": "c"
     }
 }
