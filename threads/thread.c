@@ -495,6 +495,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 
 	//(P2:syscall)
 	t->is_user = false;
+	t->fd_table[0] = STDIN_FILENO;
+	t->fd_table[1] = STDOUT_FILENO;
+	t->fd_table[2] = STDERR_FILENO;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

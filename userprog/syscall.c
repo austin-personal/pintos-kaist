@@ -9,6 +9,11 @@
 #include "intrinsic.h"
 //(P2:syscall)
 #include "filesys/file.h"
+#include "filesys/filesys.h"
+#include "userprog/process.h"
+#include "threads/palloc.h"
+#include "threads/synch.h"
+#include <string.h>
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -38,6 +43,8 @@ int sys_open(const char *file);
 void sys_close(int fd);
 int sys_read(int fd, void *buffer, unsigned size);
 void sys_seek (int fd, unsigned position);
+int sys_filesize(int fd);
+unsigned sys_tell(int fd);
 
 
 
@@ -90,9 +97,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_OPEN:
 		f->R.rax = sys_open(f->R.rdi);
 		break;
-	// case SYS_FILESIZE:
-	// 	// f->R.rax = filesize(f->R.rdi);
-	// 	break;
+	case SYS_FILESIZE:
+		f->R.rax = sys_filesize(f->R.rdi);
+		break;
 	case SYS_READ:
 		f->R.rax = sys_read(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
@@ -102,15 +109,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_SEEK:
 		sys_seek(f->R.rdi, f->R.rsi);
 		break;
-	// case SYS_TELL:
-	// 	// f->R.rax = tell(f->R.rdi);
-	// 	break;
+	case SYS_TELL:
+		f->R.rax = sys_tell(f->R.rdi);
+		break;
 	case SYS_CLOSE:
 		sys_close(f->R.rdi);
 		break;
-	// case SYS_DUP2:
-	// 	// f->R.rax = dup2(f->R.rdi, f->R.rsi);
-	// 	break;
 	default:
 		thread_exit();
 		break;
@@ -121,18 +125,13 @@ syscall_handler (struct intr_frame *f UNUSED) {
 void check_ptr(const void *ptr)
 {
 	struct thread *cur = thread_current();
-	// multi-oom
-	if (ptr > USER_STACK)
-	{
-		sys_exit(-1);
-	}
-	if (!is_user_vaddr(ptr)) return false; // Check whether it is in user stack
+
+	if (ptr > USER_STACK) sys_exit(-1);
+
+	if (!is_user_vaddr(ptr)) sys_exit(-1); // Check whether it is in user stack
 	// is_user_vaddr will call is_kernel_vaddr to check whether it is in user stack
 
-	if (pml4_get_page(cur->pml4, ptr) == NULL)
-	{
-		sys_exit(-1);
-	}
+	if (pml4_get_page(cur->pml4, ptr) == NULL || ptr == NULL ) sys_exit(-1);
 }
 
 bool check_file_open(int fd)
@@ -172,22 +171,28 @@ int sys_write(int fd, const void *buffer, unsigned size)
 {
 	check_ptr(buffer);
 
-	// Validates fd
-	if (fd >= 32 || fd <= 0) 
-	{ 	
-		sys_exit(-1);
-	}
-
 	struct thread *t = thread_current();
+
 	if (fd == 1) //  fd 1 = 표준 출력(stdout)
 	{
 		putbuf(buffer, size); // Writes the N characters in BUFFER to the console.
+		
 		return size;
+		
 	}
-	
-	else
+	// else if (fd == 0)
+	// {
+	// 	return -1;
+	// }
+	else if (check_file_open(fd))
 	{
+		
 		return file_write(t->fd_table[fd], buffer, size); // Writes size bytes from buffer to the open file fd
+	}
+	else 
+	{
+		
+		sys_exit(-1);
 	}
 }
 
@@ -205,23 +210,34 @@ bool sys_create (const char *file, unsigned initial_size)
 int sys_open(const char *file)
 {
 	check_ptr(file);
+	
 	struct file *f = filesys_open(file);
 	
-	if (f == NULL)return -1;
-
-	struct thread *t = thread_current();
-	int fd;
-
-	for (fd = 3; fd < 32; fd++)
+	if (f == NULL)
 	{
-		if (t->fd_table[fd] == NULL)
-		{
-			t->fd_table[fd] = f;
-			return fd;
-		}
+		
+		return -1;
 	}
-	file_close(f); //빈 슬롯을 못 찾은 경우는 파일을 닫아준다. 
-	return -1;
+	else
+	{
+		struct thread *t = thread_current();
+		int fd;
+		
+		for (fd = 3; fd < 32; fd++)
+		{
+			if (t->fd_table[fd] == NULL)
+			{
+
+				t->fd_table[fd] = f;
+				
+				return fd;
+				
+			}
+		}
+		
+		file_close(f);
+		return -1;
+	}
 }
 
 // (P2:syscall) Closes file descriptor fd. Exiting or terminating a process.
@@ -266,3 +282,16 @@ void sys_seek (int fd, unsigned position)
 	}
 	else sys_exit(-1);
 }
+// (P2:syscall)
+int sys_filesize(int fd)
+{
+	struct thread *t = thread_current();
+	return file_length(t->fd_table[fd]);
+}
+
+unsigned sys_tell(int fd)
+{
+	struct thread *t = thread_current();
+	return file_tell(t->fd_table[fd]);
+}
+
