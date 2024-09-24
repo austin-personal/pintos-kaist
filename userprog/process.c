@@ -94,6 +94,14 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 
 	sema_down(&child->load_sema);
 
+	// (P2:oom)
+	if (child->exit_status == -1)
+	{
+		list_remove(&child->child_elem);
+		sema_up(&child->exit_sema);
+		return TID_ERROR;
+	}
+	
 	return pid;
 }
 
@@ -197,8 +205,10 @@ __do_fork (void *aux)
 	if (succ)
 		do_iret (&if_);
 error:
+	current->exit_status = -1; // (P2:oom)
 	sema_up(&current->load_sema);
 	thread_exit ();
+
 }
 
 /* Switch the current execution context to the f_name.
@@ -270,13 +280,12 @@ process_wait (tid_t child_tid UNUSED) {
     if (child == NULL) 
         return -1;
 
-    // 2) 자식이 종료될 때까지 대기한다. (process_exit에서 자식이 종료될 때 sema_up 해줄 것이다.)
-    sema_down(&child->wait_sema);
-    // 3) 자식이 종료됨을 알리는 `wait_sema` signal을 받으면 현재 스레드(부모)의 자식 리스트에서 제거한다.
-    list_remove(&child->child_elem);
-    // 4) 자식이 완전히 종료되고 스케줄링이 이어질 수 있도록 자식에게 signal을 보낸다.
-    sema_up(&child->exit_sema);
+	sema_down(&child->wait_sema);
 
+	list_remove(&child->child_elem);
+
+	sema_up(&child->exit_sema);
+	
     return child->exit_status; // 5) 자식의 exit_status를 반환한다.
 }
 
@@ -298,7 +307,7 @@ void process_exit(void)
 	{
 		file_close(cur->fd_table[i]);
 		cur->fd_table[i] = NULL;
-		//palloc_free_page(cur->fd_table[i]);
+		palloc_free_page(cur->fd_table[i]);
 	}
 	file_close(cur->running); // 현재 실행 중인 파일을 닫는다.
 	process_cleanup();
