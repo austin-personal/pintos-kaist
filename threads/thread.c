@@ -232,8 +232,10 @@ tid_t thread_create (const char *name, int priority, thread_func *function, void
 	struct thread *cur = thread_current ();
 	t->nice = cur->nice;
 	t->recent_cpu = cur->recent_cpu; 
-	
 
+	// (P2:syscall) fork
+	t->parent = thread_current();
+	list_push_back(&thread_current()->child_list, &t->child_elem);
 	/* Add to run queue. */
 	thread_unblock (t);
 	preempt();
@@ -498,6 +500,19 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->fd_table[0] = STDIN_FILENO;
 	t->fd_table[1] = STDOUT_FILENO;
 	t->fd_table[2] = STDERR_FILENO;
+	for (int i = 3; i < 32; i++) 
+	{
+		t->fd_table[i] =NULL;
+	}
+	
+
+	//(P2:syscall) fork
+	list_init(&(t->child_list)); //parent child relationship
+	sema_init(&t->load_sema, 0); //When child process is loading, parent should wait
+	//(P2:syscall) wait
+	sema_init(&t->exit_sema, 0); 
+    sema_init(&t->wait_sema, 0);
+	
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

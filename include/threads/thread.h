@@ -5,10 +5,13 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+//(P2:syscall) fork
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
 
+#define USERPROG
 
 /* States in a thread's life cycle. */
 enum thread_status {
@@ -113,6 +116,12 @@ struct thread {
 	struct list_elem elem;              /* List element. */
 	// (P2:syscall)
 	bool is_user;
+	struct list child_list; //fork시에 부모 자식 관계 리스트
+    struct list_elem child_elem; // fork시에 부모 자식 관계 엘렘
+	struct semaphore load_sema; // fork시에 자식이 load되는 동안 부모를 재우기 위한 세마
+	struct semaphore wait_sema;
+	struct semaphore exit_sema;
+
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -121,6 +130,9 @@ struct thread {
 	struct file *fd_table[32]; // 파일 디스크립터 생성
 	int exit_status; // 프로세스 종료 상태
 	struct file *running; // 현재 스레드의 실행중인 파일을 저장
+	struct thread *parent; // 부모 프로세스 포인터 저장
+	struct intr_frame parent_if; //fork시에 부모 IF를 저장할 변수
+
 
 #endif
 #ifdef VM

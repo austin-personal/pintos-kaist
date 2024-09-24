@@ -10,4 +10,7 @@ int process_wait (tid_t);
 void process_exit (void);
 void process_activate (struct thread *next);
 
+//(P2:syscall) fork
+struct thread *get_child_process(int pid);
+
 #endif /* userprog/process.h */

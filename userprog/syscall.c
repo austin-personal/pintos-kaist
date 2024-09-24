@@ -31,6 +31,8 @@ void syscall_handler (struct intr_frame *);
 #define MSR_LSTAR 0xc0000082        /* Long mode SYSCALL target */
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
 
+//(P2:syscall)
+typedef int pid_t;
 
 //(P2:syscall)
 void check_ptr(const void *ptr);
@@ -47,9 +49,9 @@ int sys_filesize(int fd);
 unsigned sys_tell(int fd);
 bool sys_remove(const char *file);
 
-int wait (pid_t pid);
-pid_t fork (const char *thread_name);
-int exec (const char *cmd_line);
+int sys_wait (pid_t pid);
+pid_t sys_fork (const char *thread_name, struct intr_frame *f);
+int sys_exec (const char *cmd_line);
 
 void
 syscall_init (void) {
@@ -79,16 +81,15 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_EXIT:
 		sys_exit(f->R.rdi);
 		break;
-	// case SYS_FORK:
-	// 	// f->R.rax = fork(f->R.rdi, f);
-	// 	break;
-	// case SYS_EXEC:
-	// 	// if (exec(f->R.rdi) == -1)
-	// 	// 	exit(-1);
-	// 	break;
-	// case SYS_WAIT:
-	// 	// f->R.rax = process_wait(f->R.rdi);
-	// 	break;
+	case SYS_FORK:
+		f->R.rax = sys_fork(f->R.rdi, f);
+		break;
+	case SYS_EXEC:
+		f->R.rax = sys_exec(f->R.rdi);
+		break;
+	case SYS_WAIT:
+		f->R.rax = sys_wait(f->R.rdi);
+		break;
 	case SYS_CREATE:
 		f->R.rax = sys_create(f->R.rdi, f->R.rsi);
 		break;
@@ -279,21 +280,50 @@ void sys_seek (int fd, unsigned position)
 	}
 	else sys_exit(-1);
 }
-// (P2:syscall)
+
+// (P2:syscall) Returns the size of FILE in bytes
 int sys_filesize(int fd)
 {
 	struct thread *t = thread_current();
 	return file_length(t->fd_table[fd]);
 }
 
+// (P2:syscall) Returns the current position in FILE as a byte offset from the start of the file. similar to seek.
 unsigned sys_tell(int fd)
 {
 	struct thread *t = thread_current();
 	return file_tell(t->fd_table[fd]);
 }
 
-
+// (P2:syscall) Deletes the file named NAME.
 bool sys_remove(const char *file)
 {
 	return filesys_remove(file);
+}
+
+//(P2:syscall) Waits for thread TID to die and returns its exit status
+int sys_wait (pid_t pid){
+	return process_wait(pid);
+}
+
+//(P2:syscall)Clones the current process as `name`. Returns the new process's thread id, or TID_ERROR 
+pid_t sys_fork (const char *thread_name, struct intr_frame *f){
+	return process_fork(thread_name, f);
+}
+
+//(P2:syscall)
+int sys_exec (const char *cmd_line){
+	check_ptr(cmd_line);
+
+	char* cmd_line_copy;
+
+	cmd_line_copy = palloc_get_page(0);
+	
+	if (cmd_line_copy ==NULL) 
+		sys_exit(-1);
+
+	strlcpy(cmd_line_copy, cmd_line, PGSIZE);
+
+	if (process_exec(cmd_line_copy) == -1) 
+		sys_exit(-1); 
 }
