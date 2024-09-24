@@ -19,7 +19,7 @@ enum vm_type
 	/* Auxillary bit flag marker for store information. You can add more
 	 * markers, until the value is fit in the int. */
 	VM_STACK = (1 << 3),
-	VM_WRITABLE = (1 << 4),
+	// VM_WRITABLE = (1 << 4),
 
 	/* DO NOT EXCEED THIS VALUE. */
 	VM_MARKER_END = (1 << 31),
@@ -51,6 +51,7 @@ struct page
 	struct frame *frame; /* Back reference for frame */
 
 	/* Your implementation */
+	bool writable;
 	struct hash_elem hash_elem; // 해시 테이블에 삽입하기 위해 추가.
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -70,6 +71,7 @@ struct frame
 {
 	void *kva;
 	struct page *page;
+	struct thread *owner;
 };
 
 /* The function table for page operations.
@@ -121,6 +123,7 @@ bool vm_claim_page(void *va);
 enum vm_type page_get_type(struct page *page);
 
 bool is_stack_page(struct page *page);
+// bool is_writable_page(struct page *page);
 // load_segment함수에서 바이너리 파일을 로드할 때 필수적인 정보를 포함하는 구조체 정의
 struct load_info
 {

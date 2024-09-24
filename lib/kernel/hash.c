@@ -103,7 +103,6 @@ hash_insert(struct hash *h, struct hash_elem *new)
 		insert_elem(h, bucket, new);
 
 	rehash(h);
-
 	return old;
 }
 
@@ -424,7 +423,7 @@ remove_elem(struct hash *h, struct hash_elem *e)
 
 // 내가 추가한 함수들
 // 페이지 해시 함수
-uint64_t page_hash_func(const struct hash_elem *e, void *aux)
+uint64_t page_hash_func(const struct hash_elem *e, void *aux UNUSED)
 {
 	/* hash_entry를 이용하여 해시 테이블에 저장되어 있는 hash_elem
 	포인터를 사용해 원래의 page 구조체 포인터를 얻음*/
@@ -434,7 +433,7 @@ uint64_t page_hash_func(const struct hash_elem *e, void *aux)
 // 비교 함수
 bool page_less_func(const struct hash_elem *a,
 					const struct hash_elem *b,
-					void *aux)
+					void *aux UNUSED)
 {
 	struct page *p1 = hash_entry(a, struct page, hash_elem);
 	struct page *p2 = hash_entry(b, struct page, hash_elem);

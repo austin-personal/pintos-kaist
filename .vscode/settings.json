@@ -24,6 +24,9 @@
         "fixed_point.h": "c",
         "stdint.h": "c",
         "hash.h": "c",
-        "vm.h": "c"
+        "vm.h": "c",
+        "stddef.h": "c",
+        "malloc.h": "c",
+        "uninit.h": "c"
     }
 }

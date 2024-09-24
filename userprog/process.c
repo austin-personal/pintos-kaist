@@ -78,7 +78,6 @@ initd(void *f_name)
 #endif
 
 	process_init();
-	// printf("%d\n", process_exec(f_name));
 	if (process_exec(f_name) < 0)
 		PANIC("Fail to launch initd\n");
 	NOT_REACHED();
@@ -232,11 +231,13 @@ int process_exec(void *f_name)
 
 	/* And then load the binary */
 	success = load(file_name, &_if);
-
 	/* If load failed, quit. */
+
 	palloc_free_page(file_name);
 	if (!success)
+	{
 		return -1;
+	}
 
 	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 	/* Start switched process. */
@@ -439,10 +440,10 @@ load(const char *file_name, struct intr_frame *if_)
 	// argv[argc] = NULL;				// 인자 목록 끝에 NULL 추가
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create();
+
 	if (t->pml4 == NULL)
 		goto done;
 	process_activate(thread_current());
-
 	/* Open executable file. */
 	file = filesys_open(argv[0]);
 	if (file == NULL)
@@ -509,29 +510,35 @@ load(const char *file_name, struct intr_frame *if_)
 				}
 				if (!load_segment(file, file_page, (void *)mem_page,
 								  read_bytes, zero_bytes, writable))
+				{
+					// printf("dfsdfgdfgdffdhh\n");
 					goto done;
+				}
 			}
 			else
 				goto done;
 			break;
 		}
 	}
-	// 스레드가 삭제될 때 파일을 닫을 수 있게 구조체에 파일을 저장해둔다.
-	t->running = file;
-	// 현재 실행중인 파일은 수정할 수 없게 막는다.
-	file_deny_write(file);
-	/* Set up stack. */
-	if (!setup_stack(if_))
-		goto done;
 
+	if (!setup_stack(if_))
+	{
+		goto done;
+	}
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+	// 스레드가 삭제될 때 파일을 닫을 수 있게 구조체에 파일을 저장해둔다.
+	t->running = file;
+	// 현재 실행중인 파일은 수정할 수 없게 막는다.
+	file_deny_write(file);
+	/* Set up stack. */
 	// 8바이트 포인터
 	uintptr_t esp = if_->rsp;
 	// 1. rsp값을 낮춰가며 stack에 프로그램 이름과 인자 값을 넣어준다.
+	// printf("%p\n", if_->rsp);
 	for (int i = argc - 1; i >= 0; i--)
 	{
 		esp -= strlen(argv[i]) + 1;
@@ -548,6 +555,7 @@ load(const char *file_name, struct intr_frame *if_)
 	// 3. NULL포인터 추가
 	esp -= sizeof(char *);
 	*(char **)esp = 0;
+
 	// 위와 결과가 같음
 	// *esp = 0;
 	// 4.rsp값을 낮춰가며 stack에 프로그램 이름 주소와 인자 주소를 넣어준다.
@@ -566,7 +574,6 @@ load(const char *file_name, struct intr_frame *if_)
 	if_->R.rdi = argc;
 	if_->R.rsi = start_argv;
 	success = true;
-
 done:
 	/* We arrive here whether the load is successful or not. */
 	// file_close(file);
@@ -741,12 +748,12 @@ lazy_load_segment(struct page *page, void *aux)
 	// 해당 페이지의 커널 가상 주소를 얻음.
 	void *kva = page->frame->kva;
 	// file_read를 사용하여 파일에서 데이터를 읽어와 페이지에 로드함.
-	if (file_read(load_info->file, kva, load_info->read_bytes) != load_info->read_bytes)
+	if (file_read(load_info->file, kva, load_info->read_bytes) != (int)load_info->read_bytes)
 	{
 		return false;
 	}
 	// 페이지의 나머지 부분을 0으로 채움.
-	memset(kva + load_info->read_bytes, 0, load_info->offset);
+	memset(kva + load_info->read_bytes, 0, load_info->zero_bytes);
 	return true;
 }
 
@@ -768,10 +775,10 @@ static bool
 load_segment(struct file *file, off_t ofs, uint8_t *upage,
 			 uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
+	// printf("dfgdfhdhdfhdfhdfh\n");
 	ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT(pg_ofs(upage) == 0);
 	ASSERT(ofs % PGSIZE == 0);
-
 	while (read_bytes > 0 || zero_bytes > 0)
 	{
 		/* Do calculate how to fill this page.
@@ -791,7 +798,8 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		aux->read_bytes = page_read_bytes;
 		aux->zero_bytes = page_zero_bytes;
 		aux->writable = writable;
-		if (!vm_alloc_page_with_initializer(VM_ANON | (writable ? VM_WRITABLE : 0), upage,
+
+		if (!vm_alloc_page_with_initializer(VM_FILE, upage,
 											writable, lazy_load_segment, aux))
 		{
 			free(aux);
@@ -816,17 +824,19 @@ setup_stack(struct intr_frame *if_)
 	/* TODO: Your code goes here */
 	// bool success = false;
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
+
 	// 주어진 stack_bottom 주소에 해당하는 페이지를 현재 스레드 페이지 테이블에 할당하고 메모리에 매핑
-	if (!vm_alloc_page_with_initializer(VM_ANON | VM_STACK, stack_bottom, true, lazy_load_segment, NULL))
+	if (!vm_alloc_page_with_initializer(VM_ANON | VM_STACK, stack_bottom, true, NULL, NULL))
 	{
 		return false;
 	}
 	if (!vm_claim_page(stack_bottom))
 	{
+		printf("페이지 할당실패!!!\n");
 		return false;
 	}
-
-	if_->rsp = stack_bottom + PGSIZE;
+	if_->rsp = stack_bottom;
+	// printf("%p\n", if_->rsp);
 	return true;
 }
 #endif /* VM */

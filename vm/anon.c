@@ -27,10 +27,22 @@ void vm_anon_init(void)
 /* Initialize the file mapping */
 bool anon_initializer(struct page *page, enum vm_type type, void *kva)
 {
+	ASSERT(page != NULL);
+	ASSERT(type == VM_ANON);
 	/* Set up the handler */
 	page->operations = &anon_ops;
-
 	struct anon_page *anon_page = &page->anon;
+	// 페이지가 메모리에 할당되었음을 나타내는 커널 가상 주소 설정
+	anon_page->kva = kva;
+	// 페이지는 초기화 시점에서 메모리에 있으므로 초기화 상태로 설정
+	anon_page->status = PAGE_IN_MEMORY;
+	// 초기화 시점에서는 아직 스왑 아웃되지 않았으므로 swap_slot 초기화
+	anon_page->swap_slot = (size_t)-1;
+	// 페이지는 아직 특정 프레임에 연결되지 않았으므로 frame을 NULL로 설정
+	anon_page->frame = NULL;
+
+	page->writable = true;
+	return true;
 }
 
 /* Swap in the page by read contents from the swap disk. */
