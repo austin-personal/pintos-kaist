@@ -499,10 +499,13 @@ load(const char *file_name, struct intr_frame *if_)
 					/* Normal segment.
 					 * Read initial part from disk and zero the rest. */
 					read_bytes = page_offset + phdr.p_filesz;
+					// printf("file_size : %d\n", read_bytes);
 					zero_bytes = (ROUND_UP(page_offset + phdr.p_memsz, PGSIZE) - read_bytes);
+					// printf("file_size : %d\n", zero_bytes);
 				}
 				else
 				{
+
 					/* Entirely zero.
 					 * Don't read anything from disk. */
 					read_bytes = 0;
@@ -511,7 +514,7 @@ load(const char *file_name, struct intr_frame *if_)
 				if (!load_segment(file, file_page, (void *)mem_page,
 								  read_bytes, zero_bytes, writable))
 				{
-					// printf("dfsdfgdfgdffdhh\n");
+
 					goto done;
 				}
 			}
@@ -531,18 +534,16 @@ load(const char *file_name, struct intr_frame *if_)
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 	// 스레드가 삭제될 때 파일을 닫을 수 있게 구조체에 파일을 저장해둔다.
-	t->running = file;
-	// 현재 실행중인 파일은 수정할 수 없게 막는다.
-	file_deny_write(file);
+
 	/* Set up stack. */
 	// 8바이트 포인터
 	uintptr_t esp = if_->rsp;
 	// 1. rsp값을 낮춰가며 stack에 프로그램 이름과 인자 값을 넣어준다.
-	// printf("%p\n", if_->rsp);
 	for (int i = argc - 1; i >= 0; i--)
 	{
 		esp -= strlen(argv[i]) + 1;
 		memcpy(esp, argv[i], strlen(argv[i]) + 1); // 인자 값을 스택에 복사
+		// printf("rsp 값 : %s\n", argv[1]);
 		argv_addresses[i] = esp;
 	}
 	// // 2. 8의 배수 바이트 수로 맞춰주기 위해 패딩값을 넣는다.
@@ -573,6 +574,11 @@ load(const char *file_name, struct intr_frame *if_)
 	if_->rsp = esp;
 	if_->R.rdi = argc;
 	if_->R.rsi = start_argv;
+
+	t->running = file;
+	// 현재 실행중인 파일은 수정할 수 없게 막는다.
+	file_deny_write(file);
+
 	success = true;
 done:
 	/* We arrive here whether the load is successful or not. */
@@ -739,6 +745,7 @@ install_page(void *upage, void *kpage, bool writable)
 static bool
 lazy_load_segment(struct page *page, void *aux)
 {
+
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
@@ -746,14 +753,14 @@ lazy_load_segment(struct page *page, void *aux)
 	// 파일에서 데이터를 읽기 시작할 위치를 설정.
 	file_seek(load_info->file, load_info->offset);
 	// 해당 페이지의 커널 가상 주소를 얻음.
-	void *kva = page->frame->kva;
+	void *kpage = page->frame->kva;
 	// file_read를 사용하여 파일에서 데이터를 읽어와 페이지에 로드함.
-	if (file_read(load_info->file, kva, load_info->read_bytes) != (int)load_info->read_bytes)
+	if (file_read(load_info->file, kpage, load_info->read_bytes) != (int)load_info->read_bytes)
 	{
 		return false;
 	}
 	// 페이지의 나머지 부분을 0으로 채움.
-	memset(kva + load_info->read_bytes, 0, load_info->zero_bytes);
+	memset(kpage + load_info->read_bytes, 0, load_info->zero_bytes);
 	return true;
 }
 
@@ -775,7 +782,6 @@ static bool
 load_segment(struct file *file, off_t ofs, uint8_t *upage,
 			 uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
-	// printf("dfgdfhdhdfhdfhdfh\n");
 	ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT(pg_ofs(upage) == 0);
 	ASSERT(ofs % PGSIZE == 0);
@@ -810,6 +816,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		ofs += page_read_bytes;
 	}
 	return true;
 }
@@ -824,7 +831,7 @@ setup_stack(struct intr_frame *if_)
 	/* TODO: Your code goes here */
 	// bool success = false;
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
-
+	// printf("stack_bottom : %p\n", stack_bottom);
 	// 주어진 stack_bottom 주소에 해당하는 페이지를 현재 스레드 페이지 테이블에 할당하고 메모리에 매핑
 	if (!vm_alloc_page_with_initializer(VM_ANON | VM_STACK, stack_bottom, true, NULL, NULL))
 	{
@@ -835,7 +842,7 @@ setup_stack(struct intr_frame *if_)
 		printf("페이지 할당실패!!!\n");
 		return false;
 	}
-	if_->rsp = stack_bottom;
+	if_->rsp = USER_STACK;
 	// printf("%p\n", if_->rsp);
 	return true;
 }

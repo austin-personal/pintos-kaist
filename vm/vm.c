@@ -56,7 +56,6 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 	// printf("upage addr : %p\n", upage);
 	if (spt_find_page(spt, upage) != NULL)
 	{
-		printf("찾았을 때\n");
 		goto err;
 	}
 	/* TODO: Create the page, fetch the initialier according to the VM type,
@@ -69,7 +68,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 
 	/* TODO: 페이지를 spt에 삽입합니다. */
 	struct page *new_page = malloc(sizeof(struct page));
-	// printf("넣은거 : %p\n", new_page);
+
 	if (new_page == NULL)
 	{
 		goto err;
@@ -77,7 +76,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 
 	// printf("여긴가?\n");
 	// 페이지 초기화 함수 설정
-	bool (*page_initializer)(struct page *, enum vm_type, void *) = NULL;
+	bool (*page_initializer)(struct page *, enum vm_type, void *);
 	// printf("%d\n", type);
 	switch (VM_TYPE(type))
 	{
@@ -99,15 +98,13 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 	}
 	// uninit_new를 호출하여 페이지 초기화
 	uninit_new(new_page, upage, init, VM_TYPE(type), aux, page_initializer);
-
 	new_page->writable = writable;
-
 	if (!spt_insert_page(spt, new_page))
 	{
 		free(new_page);
 		goto err;
 	}
-	// printf("되라~~~~~~\n");
+
 	return true;
 err:
 	return false;
@@ -117,6 +114,7 @@ err:
 struct page *
 spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 {
+
 	// printf("%p\n", va);
 	struct page page;
 	/* TODO: Fill this function. */
@@ -179,7 +177,7 @@ static struct frame *
 vm_get_frame(void)
 {
 	// 슬아 추가
-	void *kpage = palloc_get_page(PAL_USER);
+	uint8_t *kpage = palloc_get_page(PAL_USER);
 	if (kpage == NULL)
 	{
 		PANIC("todo: page allocation failed, implement swap out");
@@ -221,20 +219,19 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
 
-	if (!is_user_vaddr(addr))
-	{
-		return false;
-	}
+	// if (!is_user_vaddr(addr))
+	// {
+	// 	return false;
+	// }
 
 	if (!not_present)
 	{
 		return false;
 	}
-
 	// 주소가 유효하다면 페이지 찾음
-	struct page *page = spt_find_page(spt, addr);
-
-	if (page == NULL || (write && !page->writable))
+	struct page *page = spt_find_page(spt, pg_round_down(addr));
+	// PANIC("페이지 폴트 page12: %p\n", page->va);
+	if (page == NULL)
 	{
 		return false;
 	}
@@ -281,20 +278,13 @@ vm_do_claim_page(struct page *page)
 	frame->page = page;
 	page->frame = frame;
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
-	// printf("커널 가상 주소: %p\n", frame->kva);
-	// printf("가상 주소: %p\n", page->va);
-
-	// if (!spt_insert_page(&thread_current()->spt, page))
-	// {
-	// 	printf("페이지 삽입 실패?????\n");
-	// 	return false;
-	// }
-
-	if (!pml4_set_page(&thread_current()->pml4, page->va, page->frame->kva, page->writable))
+	//&thread_current()->pml4 이거 아님!!! 이거 주소 기호 떼주니까 통과됨!!!!
+	if (!pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, page->writable))
 	{
-		// printf("매핑실패\n");
+		PANIC("매핑실패\n");
 		return false;
 	}
+	// printf("페이지 테이블 매핑 성공: VA=%p, KVA=%p\n", page->va, page->frame->kva);
 
 	return swap_in(page, frame->kva);
 	// return true;
