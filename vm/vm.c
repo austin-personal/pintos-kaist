@@ -220,12 +220,6 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt UNUSED = &cur->spt;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
-
-	// if (!is_user_vaddr(addr))
-	// {
-	// 	return false;
-	// }
-
 	if (!not_present)
 	{
 		return false;

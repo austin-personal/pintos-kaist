@@ -103,11 +103,10 @@ void syscall_handler(struct intr_frame *f)
 	break;
 	case SYS_READ:
 	{
-		// printf("읽기시스템콜\n");
+
 		int fd = f->R.rdi;
 		void *buffer = f->R.rsi;
 		unsigned size = f->R.rdx;
-		// printf("%d %p %d\n", fd, buffer, size);
 		f->R.rax = sys_read(fd, buffer, size);
 	}
 	break;
@@ -167,11 +166,9 @@ void check_ptr(const void *ptr)
 	{
 		sys_exit(-1);
 	}
-	// // read_boundary
-	// if (spt_find_page(&cur->spt, pg_round_down(ptr)) == NULL)
-	// {
-	// 	sys_exit(-1);
-	// }
+	// 새로운 vm 방식에서는 페이지 폴트를 일으켜야한다.
+	// 밑에 방식으로 하면 당연히 NULL이 나오는 상황이라 페이지 폴트 자체가 일어나기도
+	// 전에 그냥 exit 해버린다. ->spt테이블안에 페이지가 있음에도 페이지를 가져오지 못함
 	// if (pml4_get_page(cur->pml4, ptr) == NULL)
 	// {
 	// 	sys_exit(-1);
@@ -300,8 +297,6 @@ pid_t sys_fork(const char *thread_name, struct intr_frame *f)
 	pid_t pid;
 	pid = process_fork(thread_name, f);
 	// 복제된 프로세스도 자식으로 넣음
-
-	// printf("fork pid :%d\n", pid);
 	if (pid == TID_ERROR)
 	{
 		return TID_ERROR;
