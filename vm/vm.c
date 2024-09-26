@@ -1,10 +1,10 @@
 /* vm.c: Generic interface for virtual memory objects. */
-
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "threads/mmu.h"
 #include "vm/uninit.h"
+#include <string.h>
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void vm_init(void)
@@ -47,7 +47,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 									vm_initializer *init, void *aux)
 {
 
-	ASSERT(VM_TYPE(type) != VM_UNINIT)
+	// ASSERT(VM_TYPE(type) != VM_UNINIT)
 
 	struct supplemental_page_table *spt = &thread_current()->spt;
 
@@ -89,6 +89,12 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 	{
 		// printf("얍얍ㅇ\n");
 		page_initializer = file_backed_initializer;
+	}
+	break;
+	case VM_UNINIT:
+	{
+		// printf("얍얍ㅇ\n");
+		page_initializer = NULL;
 	}
 	break;
 	// 필요한 다른 페이지 타입을 추가할 수 있습니다.
@@ -297,6 +303,30 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED)
 {
+	struct hash_iterator i;
+	hash_first(&i, &src->vm);
+	while (hash_next(&i))
+	{
+
+		// 가상 주소는 동일하게, 물리주소는 spt 테이블 크기 만큼 다르게 새로 할당
+		struct page *parent_page = hash_entry(hash_cur(&i), struct page, hash_elem);
+		// printf("parent_page va : %p\n", parent_page->va);
+		// printf("parent_page type: %p\n", VM_TYPE(parent_page->operations->type));
+		if (!vm_alloc_page_with_initializer(parent_page->operations->type, parent_page->va, parent_page->writable, NULL, NULL))
+		{
+			return false;
+		}
+		if (!vm_claim_page(parent_page->va))
+		{
+			return false;
+		}
+		// printf("%s\n", parent_page->frame->owner->name);
+		// 부모의 커널가상주소를 자식 주소에 카피
+		struct page *new_page = spt_find_page(dst, parent_page->va);
+		// printf("new_page : %p\n", new_page->va);
+		memcpy(new_page->frame->kva, parent_page->frame->kva, PGSIZE);
+	}
+	return true;
 }
 
 /* Free the resource hold by the supplemental page table */
