@@ -131,7 +131,8 @@ struct load_info
 	off_t offset;	   // 파일에서 읽기 시작할 오프셋
 	size_t read_bytes; // 파일에서 읽을 바이트 수
 	size_t zero_bytes; // 0으로 채울 바이트 수
-	bool writable;	   // 페이지가 쓰기 가능한지 여부
+	// uint8_t *upage;
+	bool writable; // 페이지가 쓰기 가능한지 여부
 };
 
 #endif /* VM_VM_H */

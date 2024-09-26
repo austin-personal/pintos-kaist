@@ -6,7 +6,7 @@
 #include "threads/thread.h"
 #include "intrinsic.h"
 #include "userprog/syscall.h"
-
+#include "vm/vm.h"
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -143,14 +143,15 @@ page_fault(struct intr_frame *f)
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
 	// 민경추가, bad 6총사 통과
-
 #ifdef VM
 	/* For project 3 and later. */
 	if (vm_try_handle_fault(f, fault_addr, user, write, not_present))
 		return;
 #endif
 	if (user || not_present)
+	{
 		sys_exit(-1);
+	}
 	/* Count page faults. */
 	page_fault_cnt++;
 

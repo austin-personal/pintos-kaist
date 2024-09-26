@@ -27,6 +27,7 @@
         "vm.h": "c",
         "stddef.h": "c",
         "malloc.h": "c",
-        "uninit.h": "c"
+        "uninit.h": "c",
+        "string.h": "c"
     }
 }

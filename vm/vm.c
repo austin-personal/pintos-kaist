@@ -177,17 +177,19 @@ static struct frame *
 vm_get_frame(void)
 {
 	// 슬아 추가
+
+	struct frame *frame = malloc(sizeof(struct frame));
+	if (frame == NULL)
+	{
+		PANIC("todo: frame allocation failed");
+	}
+
 	uint8_t *kpage = palloc_get_page(PAL_USER);
 	if (kpage == NULL)
 	{
 		PANIC("todo: page allocation failed, implement swap out");
 	}
-	struct frame *frame = malloc(sizeof(struct frame));
-	if (frame == NULL)
-	{
-		palloc_free_page(kpage);
-		PANIC("todo: frame allocation failed");
-	}
+
 	frame->kva = kpage;				 // 할당된 물리 페이지
 	frame->owner = thread_current(); // 현재 스레드가 프레임 소유자
 	frame->page = NULL;				 // 페이지 아직 연결되지 않음

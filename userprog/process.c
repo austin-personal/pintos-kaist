@@ -514,7 +514,6 @@ load(const char *file_name, struct intr_frame *if_)
 				if (!load_segment(file, file_page, (void *)mem_page,
 								  read_bytes, zero_bytes, writable))
 				{
-
 					goto done;
 				}
 			}
@@ -761,6 +760,16 @@ lazy_load_segment(struct page *page, void *aux)
 	}
 	// 페이지의 나머지 부분을 0으로 채움.
 	memset(kpage + load_info->read_bytes, 0, load_info->zero_bytes);
+	/* Add the page to the process's address space. */
+	// msg("load_segment z : %d\n", load_info->zero_bytes);
+	// if (pml4_get_page(t->pml4, load_info->upage) != NULL)
+	// {
+	// 	printf("fdgdfgdf %p\n", load_info->upage);
+	// 	// if (!vm_claim_page(load_info->upage))
+	// 	// {
+	// 	// 	return false;
+	// 	// }
+	// }
 	return true;
 }
 
@@ -804,7 +813,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		aux->read_bytes = page_read_bytes;
 		aux->zero_bytes = page_zero_bytes;
 		aux->writable = writable;
-
+		// aux->upage = upage;
 		if (!vm_alloc_page_with_initializer(VM_FILE, upage,
 											writable, lazy_load_segment, aux))
 		{
@@ -816,6 +825,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		// 승우님 추가
 		ofs += page_read_bytes;
 	}
 	return true;
@@ -843,7 +853,6 @@ setup_stack(struct intr_frame *if_)
 		return false;
 	}
 	if_->rsp = USER_STACK;
-	// printf("%p\n", if_->rsp);
 	return true;
 }
 #endif /* VM */

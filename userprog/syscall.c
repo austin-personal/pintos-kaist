@@ -13,6 +13,7 @@
 #include "filesys/file.h"
 #include "userprog/process.h"
 #include "threads/palloc.h"
+#include "vm/vm.h"
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 void check_ptr(const void *ptr);
@@ -102,9 +103,11 @@ void syscall_handler(struct intr_frame *f)
 	break;
 	case SYS_READ:
 	{
+		// printf("읽기시스템콜\n");
 		int fd = f->R.rdi;
 		void *buffer = f->R.rsi;
 		unsigned size = f->R.rdx;
+		// printf("%d %p %d\n", fd, buffer, size);
 		f->R.rax = sys_read(fd, buffer, size);
 	}
 	break;
@@ -160,15 +163,19 @@ void check_ptr(const void *ptr)
 {
 	struct thread *cur = thread_current();
 	// multi-oom
-	if (ptr > USER_STACK)
+	if (ptr > USER_STACK || ptr == NULL)
 	{
 		sys_exit(-1);
 	}
-
-	if (pml4_get_page(cur->pml4, ptr) == NULL)
-	{
-		sys_exit(-1);
-	}
+	// // read_boundary
+	// if (spt_find_page(&cur->spt, pg_round_down(ptr)) == NULL)
+	// {
+	// 	sys_exit(-1);
+	// }
+	// if (pml4_get_page(cur->pml4, ptr) == NULL)
+	// {
+	// 	sys_exit(-1);
+	// }
 }
 void sys_halt(void)
 {
@@ -243,6 +250,7 @@ int sys_close(int fd)
 
 int sys_read(int fd, void *buffer, unsigned size)
 {
+
 	check_ptr(buffer);
 	if (!is_user_vaddr(fd) || fd >= 32 || fd < 0)
 	{
@@ -262,7 +270,6 @@ int sys_read(int fd, void *buffer, unsigned size)
 
 int sys_write(int fd, const void *buffer, unsigned size)
 {
-
 	check_ptr(buffer);
 	if (!is_user_vaddr(fd) || fd >= 32 || fd <= 0)
 	{
