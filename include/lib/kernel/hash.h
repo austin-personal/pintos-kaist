@@ -101,4 +101,5 @@ uint64_t hash_int(int);
 // 슬아 추가
 uint64_t page_hash_func(const struct hash_elem *e, void *aux);
 bool page_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux);
+void free_hash_func(struct hash_elem *e, void *aux);
 #endif /* lib/kernel/hash.h */

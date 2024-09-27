@@ -346,6 +346,7 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+	hash_clear(&spt->vm, free_hash_func);
 }
 
 // 비트플래그를 사용하여 스택페이지인지 표시함.

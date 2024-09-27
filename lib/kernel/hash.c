@@ -439,3 +439,8 @@ bool page_less_func(const struct hash_elem *a,
 	struct page *p2 = hash_entry(b, struct page, hash_elem);
 	return p1->va < p2->va;
 }
+void free_hash_func(struct hash_elem *e, void *aux)
+{
+	struct page *p = hash_entry(e, struct page, hash_elem);
+	free(p);
+}
