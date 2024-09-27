@@ -193,4 +193,9 @@ void mlfqs_recalculate_priority(void);
 
 
 void preempt(void);
+
+
+//(P2:syscall) fork
+struct thread *get_child_process(int pid);
+void argument_stack(char **parse, int count, void **rsp);
 #endif /* threads/thread.h */
