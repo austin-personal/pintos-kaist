@@ -47,7 +47,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 									vm_initializer *init, void *aux)
 {
 
-	// ASSERT(VM_TYPE(type) != VM_UNINIT)
+	ASSERT(VM_TYPE(type) != VM_UNINIT)
 
 	struct supplemental_page_table *spt = &thread_current()->spt;
 
@@ -91,18 +91,14 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		page_initializer = file_backed_initializer;
 	}
 	break;
-	case VM_UNINIT:
-	{
-		// printf("얍얍ㅇ\n");
-		page_initializer = NULL;
-	}
-	break;
 	// 필요한 다른 페이지 타입을 추가할 수 있습니다.
 	default:
 		free(new_page);
 		goto err; // 지원하지 않는 페이지 타입인 경우
 	}
 	// uninit_new를 호출하여 페이지 초기화
+	// 무조건 uninit 페이지 생성 .
+	// 바뀔 타입 : VM_TYPE(type)
 	uninit_new(new_page, upage, init, VM_TYPE(type), aux, page_initializer);
 	new_page->writable = writable;
 	if (!spt_insert_page(spt, new_page))
@@ -330,6 +326,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 		{
 			void *aux = malloc(sizeof(struct load_info));
 			memcpy(aux, parent_page->uninit.aux, sizeof(struct load_info));
+			// uninit.type 이건 바뀔 타입 !!!
 			if (!vm_alloc_page_with_initializer(parent_page->uninit.type, parent_page->va, parent_page->writable, parent_page->uninit.init, aux))
 			{
 				free(aux);
