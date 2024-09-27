@@ -311,20 +311,35 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 		// 가상 주소는 동일하게, 물리주소는 spt 테이블 크기 만큼 다르게 새로 할당
 		struct page *parent_page = hash_entry(hash_cur(&i), struct page, hash_elem);
 		// printf("parent_page va : %p\n", parent_page->va);
-		// printf("parent_page type: %p\n", VM_TYPE(parent_page->operations->type));
-		if (!vm_alloc_page_with_initializer(parent_page->operations->type, parent_page->va, parent_page->writable, NULL, NULL))
+		if (VM_TYPE(parent_page->operations->type) == VM_ANON)
+		{
+
+			if (!vm_alloc_page_with_initializer(parent_page->operations->type, parent_page->va, parent_page->writable, NULL, NULL))
+			{
+				printf("생성실패!\n");
+				return false;
+			}
+			struct page *new_page = spt_find_page(dst, parent_page->va);
+			if (!vm_do_claim_page(new_page))
+			{
+				return false;
+			}
+			memcpy(new_page->frame->kva, parent_page->frame->kva, PGSIZE);
+		}
+		else if (VM_TYPE(parent_page->operations->type) == VM_UNINIT)
+		{
+			void *aux = malloc(sizeof(struct load_info));
+			memcpy(aux, parent_page->uninit.aux, sizeof(struct load_info));
+			if (!vm_alloc_page_with_initializer(parent_page->uninit.type, parent_page->va, parent_page->writable, parent_page->uninit.init, aux))
+			{
+				free(aux);
+				return false;
+			}
+		}
+		else
 		{
 			return false;
 		}
-		if (!vm_claim_page(parent_page->va))
-		{
-			return false;
-		}
-		// printf("%s\n", parent_page->frame->owner->name);
-		// 부모의 커널가상주소를 자식 주소에 카피
-		struct page *new_page = spt_find_page(dst, parent_page->va);
-		// printf("new_page : %p\n", new_page->va);
-		memcpy(new_page->frame->kva, parent_page->frame->kva, PGSIZE);
 	}
 	return true;
 }
