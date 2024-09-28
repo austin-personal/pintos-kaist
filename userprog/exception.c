@@ -131,7 +131,6 @@ page_fault(struct intr_frame *f)
 	   accessed to cause the fault.  It may point to code or to
 	   data.  It is not necessarily the address of the instruction
 	   that caused the fault (that's f->rip). */
-
 	fault_addr = (void *)rcr2();
 
 	/* Turn interrupts back on (they were only off so that we could
@@ -144,6 +143,8 @@ page_fault(struct intr_frame *f)
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
 	// 민경추가, bad 6총사 통과
+	if (user)
+		thread_current()->rsp = f->rsp;
 #ifdef VM
 	/* For project 3 and later. */
 	if (vm_try_handle_fault(f, fault_addr, user, write, not_present))

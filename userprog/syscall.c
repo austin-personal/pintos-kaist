@@ -61,6 +61,7 @@ void syscall_init(void)
 void syscall_handler(struct intr_frame *f)
 {
 	struct thread *cur = thread_current();
+	cur->rsp = f->rsp;
 	cur->is_user = true;
 	// printf("system call!\n");
 	// 시스템 콜 번호
@@ -80,7 +81,6 @@ void syscall_handler(struct intr_frame *f)
 	break;
 	case SYS_CREATE:
 	{
-
 		f->R.rax = sys_create(f->R.rdi, f->R.rsi);
 	}
 	break;
@@ -92,12 +92,12 @@ void syscall_handler(struct intr_frame *f)
 	break;
 	case SYS_OPEN:
 	{
-
 		f->R.rax = sys_open(f->R.rdi);
 	}
 	break;
 	case SYS_CLOSE:
 	{
+
 		sys_close(f->R.rdi);
 	}
 	break;
@@ -233,6 +233,7 @@ int sys_open(const char *file)
 
 int sys_close(int fd)
 {
+	// printf("close\n");
 	struct thread *t = thread_current();
 	if (!is_user_vaddr(fd) || fd >= 32 || fd < 0)
 	{

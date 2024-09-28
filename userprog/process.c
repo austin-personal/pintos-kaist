@@ -815,7 +815,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		aux->zero_bytes = page_zero_bytes;
 		aux->writable = writable;
 		// aux->upage = upage;
-		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
+		if (!vm_alloc_page_with_initializer(VM_FILE, upage,
 											writable, lazy_load_segment, aux))
 		{
 			free(aux);
@@ -844,7 +844,7 @@ setup_stack(struct intr_frame *if_)
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 	// printf("stack_bottom : %p\n", stack_bottom);
 	// 주어진 stack_bottom 주소에 해당하는 페이지를 현재 스레드 페이지 테이블에 할당하고 메모리에 매핑
-	if (!vm_alloc_page_with_initializer(VM_ANON | VM_STACK, stack_bottom, true, NULL, NULL))
+	if (!vm_alloc_page(VM_ANON | VM_STACK, stack_bottom, true))
 	{
 		return false;
 	}
@@ -854,6 +854,7 @@ setup_stack(struct intr_frame *if_)
 		return false;
 	}
 	if_->rsp = USER_STACK;
+	// printf("안녕하세요! : %p\n", stack_bottom);
 	return true;
 }
 #endif /* VM */

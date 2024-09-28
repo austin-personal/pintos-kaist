@@ -99,7 +99,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 	// uninit_new를 호출하여 페이지 초기화
 	// 무조건 uninit 페이지 생성 .
 	// 바뀔 타입 : VM_TYPE(type)
-	uninit_new(new_page, upage, init, VM_TYPE(type), aux, page_initializer);
+	uninit_new(new_page, upage, init, type, aux, page_initializer);
 	new_page->writable = writable;
 	if (!spt_insert_page(spt, new_page))
 	{
@@ -116,7 +116,6 @@ err:
 struct page *
 spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 {
-
 	// printf("%p\n", va);
 	struct page page;
 	/* TODO: Fill this function. */
@@ -206,6 +205,18 @@ vm_get_frame(void)
 static void
 vm_stack_growth(void *addr UNUSED)
 {
+	while (addr != USER_STACK - PGSIZE)
+	{
+		if (!vm_alloc_page(VM_ANON | VM_STACK, addr, true))
+		{
+			PANIC("스택페이지 할당실패\n");
+		}
+		if (!vm_claim_page(addr))
+		{
+			PANIC("스택페이지 클레임 실패\n");
+		}
+		addr += PGSIZE;
+	}
 }
 
 /* Handle the fault on write_protected page */
@@ -218,21 +229,42 @@ vm_handle_wp(struct page *page UNUSED)
 bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 						 bool user UNUSED, bool write UNUSED, bool not_present UNUSED)
 {
+	// printf("addr : %p\n", addr);
+	// printf("round addr : %p\n", pg_round_down(addr));
 	struct thread *cur = thread_current();
 	struct supplemental_page_table *spt UNUSED = &cur->spt;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
+	// 이거 지우니까 bad-write2 통과 안됨.. why??
 	if (!not_present)
 	{
 		return false;
 	}
 	// 주소가 유효하다면 페이지 찾음
 	struct page *page = spt_find_page(spt, pg_round_down(addr));
-	// PANIC("페이지 폴트 page12: %p\n", page->va);
+	// printf(" 스레드 rsp : %p\n", cur->rsp);
+	// printf(" 스레드 rsp 라운드 : %p\n", pg_round_down(cur->rsp));
+	// printf(" 유저임? : %d\n", user);
+	// printf(" 쓰기가능? : %d\n", write);
+	// printf("%p\n", addr);
 	if (page == NULL)
 	{
-		return false;
+		void *stack_boundary = (void *)(((uint32_t *)USER_STACK) - MAX_STACK_SIZE);
+		if (addr > stack_boundary && write)
+		{
+			if (USER_STACK > addr && user)
+			{
+				vm_stack_growth(pg_round_down(addr));
+				return true;
+			}
+		}
+		else
+		{
+			return false;
+		}
 	}
+	// printf();
+
 	// 페이지 클레임
 	if (!vm_do_claim_page(page))
 	{
@@ -307,7 +339,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 		// 가상 주소는 동일하게, 물리주소는 spt 테이블 크기 만큼 다르게 새로 할당
 		struct page *parent_page = hash_entry(hash_cur(&i), struct page, hash_elem);
 		// printf("parent_page va : %p\n", parent_page->va);
-		if (VM_TYPE(parent_page->operations->type) == VM_ANON)
+		if (VM_TYPE(parent_page->operations->type) == VM_ANON || VM_TYPE(parent_page->operations->type) == VM_FILE)
 		{
 
 			if (!vm_alloc_page_with_initializer(parent_page->operations->type, parent_page->va, parent_page->writable, NULL, NULL))

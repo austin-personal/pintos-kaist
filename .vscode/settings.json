@@ -28,6 +28,8 @@
         "stddef.h": "c",
         "malloc.h": "c",
         "uninit.h": "c",
-        "string.h": "c"
+        "string.h": "c",
+        "vaddr.h": "c",
+        "unistd.h": "c"
     }
 }
