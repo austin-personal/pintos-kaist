@@ -236,10 +236,10 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
 	// 이거 지우니까 bad-write2 통과 안됨.. why??
-	if (!not_present)
-	{
-		return false;
-	}
+	// if (user && not_present)
+	// {
+	// 	pml4_set_page()
+	// }
 	// 주소가 유효하다면 페이지 찾음
 	struct page *page = spt_find_page(spt, pg_round_down(addr));
 	// printf(" 스레드 rsp : %p\n", cur->rsp);
@@ -247,11 +247,14 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	// printf(" 유저임? : %d\n", user);
 	// printf(" 쓰기가능? : %d\n", write);
 	// printf("%p\n", addr);
+
 	if (page == NULL)
 	{
+
 		void *stack_boundary = (void *)(((uint32_t *)USER_STACK) - MAX_STACK_SIZE);
 		if (addr > stack_boundary && write)
 		{
+
 			if (USER_STACK > addr && user)
 			{
 				vm_stack_growth(pg_round_down(addr));
@@ -270,7 +273,6 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	{
 		return false;
 	}
-
 	return true;
 }
 

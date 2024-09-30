@@ -30,6 +30,7 @@
         "uninit.h": "c",
         "string.h": "c",
         "vaddr.h": "c",
-        "unistd.h": "c"
+        "unistd.h": "c",
+        "gdt.h": "c"
     }
 }

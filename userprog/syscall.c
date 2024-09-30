@@ -31,6 +31,8 @@ int sys_wait(pid_t pid);
 int sys_exec(const char *cmd_line);
 void sys_seek(int fd, unsigned position);
 unsigned sys_tell(int fd);
+void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+void sys_munmap(void *addr);
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -93,6 +95,7 @@ void syscall_handler(struct intr_frame *f)
 	case SYS_OPEN:
 	{
 		f->R.rax = sys_open(f->R.rdi);
+		// printf("open : %d", f->R.rax);
 	}
 	break;
 	case SYS_CLOSE:
@@ -151,6 +154,19 @@ void syscall_handler(struct intr_frame *f)
 	case SYS_TELL:
 	{
 		f->R.rax = sys_tell(f->R.rdi);
+	}
+	break;
+	case SYS_MMAP:
+	{
+		// printf("addr :%p length:%d writable:%d fd : %d ofs: %d\n", f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+		f->R.rax = sys_mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+		// printf("mmap: %p\n", f->R.rax);
+	}
+	break;
+	case SYS_MUNMAP:
+	{
+		// printf("munmap: %p\n", f->R.rdi);
+		sys_munmap(f->R.rdi);
 	}
 	break;
 	default:
@@ -344,4 +360,22 @@ unsigned sys_tell(int fd)
 {
 	struct thread *t = thread_current();
 	return file_tell(t->fd_table[fd]);
+}
+void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
+{
+	struct thread *t = thread_current();
+	if (fd < 3 || fd > 32)
+	{
+		sys_exit(-1);
+	}
+	if (addr == NULL || length == 0 || t->fd_table[fd] == NULL || offset % PGSIZE != 0)
+	{
+		return NULL;
+	}
+
+	return do_mmap(addr, length, writable, t->fd_table[fd], offset);
+}
+void sys_munmap(void *addr)
+{
+	// do_munmap(addr);
 }
