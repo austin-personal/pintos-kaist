@@ -248,7 +248,13 @@ int sys_close(int fd)
 
 int sys_read(int fd, void *buffer, unsigned size)
 {
-
+	// writecode2 통과 코드
+	struct page *find_page = spt_find_page(&thread_current()->spt, pg_round_down(buffer));
+	if (pml4_get_page(thread_current()->pml4, buffer) && !find_page->writable)
+	{
+		sys_exit(-1);
+	}
+	//
 	check_ptr(buffer);
 	if (!is_user_vaddr(fd) || fd >= 32 || fd < 0)
 	{
