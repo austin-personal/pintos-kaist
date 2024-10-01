@@ -3,6 +3,8 @@
 #include "vm/vm.h"
 #include "userprog/process.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
+#include "threads/mmu.h"
 static bool file_backed_swap_in(struct page *page, void *kva);
 static bool file_backed_swap_out(struct page *page);
 static void file_backed_destroy(struct page *page);
@@ -27,6 +29,7 @@ bool file_backed_initializer(struct page *page, enum vm_type type, void *kva)
 	page->operations = &file_ops;
 
 	struct file_page *file_page = &page->file;
+	file_page->fr = page->uninit.aux;
 	return true;
 }
 
@@ -48,7 +51,23 @@ file_backed_swap_out(struct page *page)
 static void
 file_backed_destroy(struct page *page)
 {
-	struct file_page *file_page UNUSED = &page->file;
+	// struct file_page *file_page UNUSED = &page->file;
+	// 수정사항 물리 주소(디스크)에 반영
+	// struct load_info *find_aux = page->file.fr;
+	// if (page->frame != NULL)
+	// {
+
+	// 	if (pml4_is_dirty(thread_current()->pml4, page->va))
+	// 	{
+	// 		file_seek(find_aux->file, find_aux->offset);
+	// 		file_write(find_aux->file, page->frame->kva, find_aux->read_bytes);
+	// 	}
+	// 	pml4_set_dirty(thread_current()->pml4, page->va, false);
+	// 	palloc_free_page(page->frame->kva);
+	// 	free(page->frame);
+	// }
+	// pml4_set_accessed(thread_current()->pml4, page->va, false);
+	// pml4_clear_page(thread_current()->pml4, page->va);
 }
 
 static bool
@@ -69,6 +88,7 @@ lazy_load(struct page *page, void *aux)
 	}
 	// 페이지의 나머지 부분을 0으로 채움.
 	memset(kpage + load_info->read_bytes, 0, load_info->zero_bytes);
+	pml4_set_dirty(thread_current()->pml4, page->va, false);
 	// printf("do_mmapfdhgdfh\n");
 	return true;
 }
@@ -78,11 +98,15 @@ void *
 do_mmap(void *addr, size_t length, int writable,
 		struct file *file, off_t offset)
 {
-	ASSERT(pg_ofs(addr) == 0);
 	// ASSERT(offset % PGSIZE == 0);
 	void *start_addr = addr;
-	off_t file_len = file_length(file);
-	while (length > 0)
+	// 파일에 대한 독립적인 참조 얻기
+	struct file *reopened_file = file_reopen(file);
+	off_t file_len = file_length(reopened_file);
+	// 페이지 생성 개수
+	int cnt = (int)pg_round_up(length) / PGSIZE;
+	long len = length;
+	while (len > 0)
 	{
 
 		/* Do calculate how to fill this page.
@@ -97,30 +121,51 @@ do_mmap(void *addr, size_t length, int writable,
 		{
 			return NULL;
 		}
-		aux->file = file;
+		aux->file = reopened_file;
 		aux->offset = offset;
 		aux->read_bytes = page_read_bytes;
 		aux->zero_bytes = page_zero_bytes;
+		aux->cnt = cnt;
+		// munmap용 파일 데이터 저장
 		if (!vm_alloc_page_with_initializer(VM_FILE, addr,
 											writable, lazy_load, aux))
 		{
 			free(aux);
 			return NULL;
 		}
-
 		/* Advance. */
 		file_len -= PGSIZE;
-		length -= PGSIZE;
+		len -= PGSIZE;
 		offset += page_read_bytes;
 		addr += PGSIZE;
-		// 승우님 추가
 	}
-	// printf("addr : %p\n", addr);
 	return start_addr;
 }
 
 /* Do the munmap */
 void do_munmap(void *addr)
 {
-	spt_remove_page(&thread_current()->spt, addr);
+	// printf("HI\n\n");
+	struct page *find_page = spt_find_page(&thread_current()->spt, addr);
+	struct load_info *find_aux = find_page->file.fr;
+	struct file *find_file = find_aux->file;
+	if (VM_TYPE(find_page->operations->type) != VM_FILE || find_aux->cnt == 0)
+	{
+		return;
+	}
+	int find_cnt = find_aux->cnt;
+	// printf("cnt:%d\n", find_cnt);
+	while (find_cnt > 0)
+	{
+		struct page *find_page = spt_find_page(&thread_current()->spt, addr);
+		// spt_remove_page(&thread_current()->spt, find_page);
+		if (pml4_is_dirty(thread_current()->pml4, find_page->va))
+		{
+			file_seek(find_aux->file, find_aux->offset);
+			file_write(find_aux->file, find_page->frame->kva, find_aux->read_bytes);
+		}
+		addr += PGSIZE;
+		find_cnt--;
+	}
+	file_close(find_file);
 }

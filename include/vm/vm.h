@@ -133,6 +133,8 @@ struct load_info
 	size_t zero_bytes; // 0으로 채울 바이트 수
 	// uint8_t *upage;
 	bool writable; // 페이지가 쓰기 가능한지 여부
+	// munmap 위함
+	int cnt;
 };
 
 #endif /* VM_VM_H */

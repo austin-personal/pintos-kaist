@@ -441,6 +441,16 @@ bool page_less_func(const struct hash_elem *a,
 }
 void free_hash_func(struct hash_elem *e, void *aux)
 {
+
 	struct page *p = hash_entry(e, struct page, hash_elem);
+	// mmap-exit 통과됨 . child로 넘어갈 때 기존 파일 내용들을 저장하고 free 해야함
+	if (VM_TYPE(p->operations->type) == VM_FILE)
+	{
+		if (pml4_is_dirty(thread_current()->pml4, p->va))
+		{
+			file_seek(p->file.fr->file, p->file.fr->offset);
+			file_write(p->file.fr->file, p->frame->kva, p->file.fr->read_bytes);
+		}
+	}
 	free(p);
 }

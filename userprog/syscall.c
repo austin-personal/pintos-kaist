@@ -249,7 +249,6 @@ int sys_open(const char *file)
 
 int sys_close(int fd)
 {
-	// printf("close\n");
 	struct thread *t = thread_current();
 	if (!is_user_vaddr(fd) || fd >= 32 || fd < 0)
 	{
@@ -363,19 +362,20 @@ unsigned sys_tell(int fd)
 }
 void *sys_mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 {
+
 	struct thread *t = thread_current();
 	if (fd < 3 || fd > 32)
 	{
 		sys_exit(-1);
 	}
-	if (addr == NULL || length == 0 || t->fd_table[fd] == NULL || offset % PGSIZE != 0)
+	// mmap kernel 0. 1.is_kernel_vaddr(addr) 2.is_kernel_vaddr(length) 로 해결
+	if (addr == NULL || length == 0 || is_kernel_vaddr(length) || t->fd_table[fd] == NULL || offset % PGSIZE != 0 || pg_ofs(addr) != 0 || is_kernel_vaddr(addr))
 	{
 		return NULL;
 	}
-
 	return do_mmap(addr, length, writable, t->fd_table[fd], offset);
 }
 void sys_munmap(void *addr)
 {
-	// do_munmap(addr);
+	do_munmap(addr);
 }

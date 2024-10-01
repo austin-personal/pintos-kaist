@@ -235,12 +235,6 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt UNUSED = &cur->spt;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
-	// 이거 지우니까 bad-write2 통과 안됨.. why??
-	// if (user && not_present)
-	// {
-	// 	pml4_set_page()
-	// }
-	// 주소가 유효하다면 페이지 찾음
 	struct page *page = spt_find_page(spt, pg_round_down(addr));
 	// printf(" 스레드 rsp : %p\n", cur->rsp);
 	// printf(" 스레드 rsp 라운드 : %p\n", pg_round_down(cur->rsp));
