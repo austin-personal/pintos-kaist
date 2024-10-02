@@ -297,13 +297,16 @@ palloc_get_multiple(enum palloc_flags flags, size_t page_cnt)
 
 	lock_acquire(&pool->lock);
 	size_t page_idx = bitmap_scan_and_flip(pool->used_map, 0, page_cnt, false);
-	// lock_release(&pool->lock);
+	lock_release(&pool->lock);
 	void *pages;
-
+	// merge 삼총사의 견고함을 위해 밑의 작업도 락 걸어줌.
+	lock_acquire(&pool->lock);
 	if (page_idx != BITMAP_ERROR)
 		pages = pool->base + PGSIZE * page_idx;
 	else
+	{
 		pages = NULL;
+	}
 
 	if (pages)
 	{
@@ -315,7 +318,6 @@ palloc_get_multiple(enum palloc_flags flags, size_t page_cnt)
 		if (flags & PAL_ASSERT)
 			PANIC("palloc_get: out of pages");
 	}
-	// merge 삼총사의 견고함을 위에 밑으로 옮김.
 	lock_release(&pool->lock);
 	return pages;
 }

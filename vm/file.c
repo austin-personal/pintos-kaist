@@ -110,7 +110,7 @@ do_mmap(void *addr, size_t length, int writable,
 	// 페이지 생성 개수
 	int cnt = (int)pg_round_up(length) / PGSIZE;
 	long len = length;
-	while (len > 0)
+	for (int i = 0; i < cnt; i++)
 	{
 
 		/* Do calculate how to fill this page.
@@ -123,6 +123,7 @@ do_mmap(void *addr, size_t length, int writable,
 		struct load_info *aux = malloc(sizeof(struct load_info));
 		if (aux == NULL)
 		{
+			file_close(reopened_file);
 			return NULL;
 		}
 		aux->file = reopened_file;
@@ -135,11 +136,12 @@ do_mmap(void *addr, size_t length, int writable,
 											writable, lazy_load, aux))
 		{
 			free(aux);
+			file_close(reopened_file);
 			return NULL;
 		}
 		/* Advance. */
-		file_len -= PGSIZE;
-		len -= PGSIZE;
+		file_len -= page_read_bytes;
+		len -= page_read_bytes;
 		offset += page_read_bytes;
 		addr += PGSIZE;
 	}
