@@ -52,16 +52,8 @@ uninit_initialize(struct page *page, void *kva)
 	void *aux = uninit->aux;
 
 	/* TODO: You may need to fix this function. */
-	bool page_init_success = uninit->page_initializer(page, uninit->type, kva);
-	if (!page_init_success)
-	{
-		return false;
-	}
-	if (init)
-	{
-		return init(page, aux);
-	}
-	return true;
+	return uninit->page_initializer(page, uninit->type, kva) &&
+		   (init ? init(page, aux) : true);
 }
 
 /* Free the resources hold by uninit_page. Although most of pages are transmuted

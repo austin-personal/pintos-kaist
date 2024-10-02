@@ -137,12 +137,10 @@ page_fault(struct intr_frame *f)
 	   be assured of reading CR2 before it changed). */
 	intr_enable();
 
-	// printf("fault_addr : %p\n", fault_addr);
 	/* Determine cause. */
 	not_present = (f->error_code & PF_P) == 0;
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
-	// 민경추가, bad 6총사 통과
 	if (user)
 		thread_current()->rsp = f->rsp;
 #ifdef VM

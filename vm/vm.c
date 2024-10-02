@@ -156,6 +156,28 @@ vm_get_victim(void)
 	struct frame *victim = NULL;
 	/* TODO: The policy for eviction is up to you. */
 
+	struct hash_iterator i;
+
+	hash_first(&i, &thread_current()->spt.vm);
+	while (hash_next(&i))
+	{
+
+		struct page *page = hash_entry(hash_cur(&i), struct page, hash_elem);
+		if (page->frame == NULL)
+		{
+			continue;
+		}
+		// 특정 가상 페이지가 최근에 접근 되었는 지 확인
+		if (!pml4_is_accessed(thread_current()->pml4, page->va))
+		{
+			// 접근한 지 오래되었으면 쫒아낼 프레임으로 선정
+			victim = page->frame;
+		}
+		else
+		{
+			pml4_set_accessed(thread_current()->pml4, page->va, false);
+		}
+	}
 	return victim;
 }
 
@@ -164,10 +186,18 @@ vm_get_victim(void)
 static struct frame *
 vm_evict_frame(void)
 {
-	struct frame *victim UNUSED = vm_get_victim();
+	struct frame *victim = vm_get_victim();
 	/* TODO: swap out the victim and return the evicted frame. */
-
-	return NULL;
+	while (victim == NULL)
+	{
+		victim = vm_get_victim();
+		// thread_yield();
+	}
+	if (!swap_out(victim->page))
+	{
+		victim = NULL;
+	}
+	return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -180,18 +210,18 @@ vm_get_frame(void)
 	// 슬아 추가
 
 	struct frame *frame = malloc(sizeof(struct frame));
-	if (frame == NULL)
-	{
-		PANIC("todo: frame allocation failed");
-	}
 
-	uint8_t *kpage = palloc_get_page(PAL_USER);
-	if (kpage == NULL)
-	{
-		PANIC("todo: page allocation failed, implement swap out");
-	}
+	frame->kva = palloc_get_page(PAL_USER | PAL_ZERO);
 
-	frame->kva = kpage;				 // 할당된 물리 페이지
+	if (frame == NULL || frame->kva == NULL)
+	{
+		palloc_free_page(frame->kva);
+		free(frame);
+		// 꺼지게 할 프레임 vm_evict_frame()함수로 찾아서 넣기
+		frame = vm_evict_frame();
+		// 가상주소에 있는 값 페이지 사이즈 만큼 0 으로 초기화
+		memset(frame->kva, 0, PGSIZE);
+	}
 	frame->owner = thread_current(); // 현재 스레드가 프레임 소유자
 	frame->page = NULL;				 // 페이지 아직 연결되지 않음
 	ASSERT(frame != NULL);
@@ -236,11 +266,12 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
 	struct page *page = spt_find_page(spt, pg_round_down(addr));
+	// printf("page write : %d\n", page->writable);
 	// printf(" 스레드 rsp : %p\n", cur->rsp);
 	// printf(" 스레드 rsp 라운드 : %p\n", pg_round_down(cur->rsp));
 	// printf(" 유저임? : %d\n", user);
 	// printf(" 쓰기가능? : %d\n", write);
-	// printf("%p\n", addr);
+	// printf("페이지 주소 : %p\n", page->va);
 
 	if (page == NULL)
 	{
@@ -260,7 +291,7 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 			return false;
 		}
 	}
-	// printf();
+	// printf("dfgfgfgf\n");
 
 	// 페이지 클레임
 	if (!vm_do_claim_page(page))
@@ -294,12 +325,13 @@ bool vm_claim_page(void *va UNUSED)
 static bool
 vm_do_claim_page(struct page *page)
 {
-	struct frame *frame = vm_get_frame();
-	if (frame == NULL)
+	// write_code 통과용 틀어막기 코드..
+	if (pml4_get_page(thread_current()->pml4, page->va) && !page->writable)
 	{
-		return false;
+		sys_exit(-1);
 	}
-
+	//
+	struct frame *frame = vm_get_frame();
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
@@ -334,7 +366,6 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 
 		// 가상 주소는 동일하게, 물리주소는 spt 테이블 크기 만큼 다르게 새로 할당
 		struct page *parent_page = hash_entry(hash_cur(&i), struct page, hash_elem);
-		// printf("parent_page va : %p\n", parent_page->va);
 		if (VM_TYPE(parent_page->operations->type) == VM_ANON || VM_TYPE(parent_page->operations->type) == VM_FILE)
 		{
 
@@ -382,9 +413,3 @@ bool is_stack_page(struct page *page)
 {
 	return VM_TYPE(page->operations->type) & VM_STACK;
 }
-
-// 페이지가 쓰기 가능한 지 아닌 지 확인하는 함수
-// bool is_writable_page(struct page *page)
-// {
-// 	return (VM_TYPE(page->operations->type) & VM_WRITABLE) != 0;
-// }

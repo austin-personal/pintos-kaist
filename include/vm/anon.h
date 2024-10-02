@@ -4,19 +4,19 @@
 struct page;
 enum vm_type;
 
-enum page_status
-{
-    PAGE_IN_MEMORY,
-    PAGE_SWAPPED,
-    PAGE_UNINITIALIZED
-};
+// enum page_status
+// {
+//     PAGE_IN_MEMORY,
+//     PAGE_SWAPPED,
+//     PAGE_UNINITIALIZED
+// };
 
 struct anon_page
 {
-    size_t swap_slot;
-    struct frame *frame;
-    enum page_status status;
-    void *kva;
+    int swap_slot; // swap된 데이터들이 저장된 섹터 구역을 의미한다.
+    // struct frame *frame;
+    // enum page_status status;
+    // void *kva;
 };
 
 void vm_anon_init(void);

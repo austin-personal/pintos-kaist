@@ -5,6 +5,7 @@
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 #include "threads/mmu.h"
+#include <string.h>
 static bool file_backed_swap_in(struct page *page, void *kva);
 static bool file_backed_swap_out(struct page *page);
 static void file_backed_destroy(struct page *page);
@@ -37,37 +38,40 @@ bool file_backed_initializer(struct page *page, enum vm_type type, void *kva)
 static bool
 file_backed_swap_in(struct page *page, void *kva)
 {
-	struct file_page *file_page UNUSED = &page->file;
+	struct file_page *file_page = &page->file;
+	file_seek(file_page->fr->file, file_page->fr->offset);
+	if (file_read(file_page->fr->file, kva, file_page->fr->read_bytes) != file_page->fr->read_bytes)
+	{
+		return false;
+	}
+	memset(kva + file_page->fr->read_bytes, 0, file_page->fr->zero_bytes);
+	return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
 static bool
 file_backed_swap_out(struct page *page)
 {
-	struct file_page *file_page UNUSED = &page->file;
+	// 파일 시스템의 파일에 데이터가 저장되어 있기 때문에
+	// 그 파일을 다시 사용할 수 있도록 메모리에서만 제거
+	struct file_page *file_page = &page->file;
+	// 1. 페이지가 dirty(수정됨)인 경우 파일에 다시 기록한다.
+	if (pml4_is_dirty(thread_current()->pml4, page->va))
+	{
+		file_seek(file_page->fr->file, file_page->fr->offset);
+		file_write(file_page->fr->file, page->frame->kva, file_page->fr->read_bytes);
+	}
+	// 2. 페이지 테이블에서 페이지를 제거하고, 프레임 해제
+	pml4_clear_page(thread_current()->pml4, page->va);
+	page->frame = NULL;
+	return true;
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
 static void
 file_backed_destroy(struct page *page)
 {
-	// struct file_page *file_page UNUSED = &page->file;
-	// 수정사항 물리 주소(디스크)에 반영
-	// struct load_info *find_aux = page->file.fr;
-	// if (page->frame != NULL)
-	// {
-
-	// 	if (pml4_is_dirty(thread_current()->pml4, page->va))
-	// 	{
-	// 		file_seek(find_aux->file, find_aux->offset);
-	// 		file_write(find_aux->file, page->frame->kva, find_aux->read_bytes);
-	// 	}
-	// 	pml4_set_dirty(thread_current()->pml4, page->va, false);
-	// 	palloc_free_page(page->frame->kva);
-	// 	free(page->frame);
-	// }
-	// pml4_set_accessed(thread_current()->pml4, page->va, false);
-	// pml4_clear_page(thread_current()->pml4, page->va);
+	struct file_page *file_page UNUSED = &page->file;
 }
 
 static bool

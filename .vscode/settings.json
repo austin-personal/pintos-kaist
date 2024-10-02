@@ -31,6 +31,9 @@
         "string.h": "c",
         "vaddr.h": "c",
         "unistd.h": "c",
-        "gdt.h": "c"
+        "gdt.h": "c",
+        "inspect.h": "c",
+        "disk.h": "c",
+        "tss.h": "c"
     }
 }
